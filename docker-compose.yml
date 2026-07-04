@@ -10,6 +10,7 @@ services:
       - "${POSTGRES_CORE_PORT}:5432"
     volumes:
       - postgres_core_data:/var/lib/postgresql/data
+      - ./database/postgres-core:/workspace/postgres-core
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_CORE_USER} -d ${POSTGRES_CORE_DB}"]
       interval: 10s
@@ -27,6 +28,7 @@ services:
       - "${POSTGRES_BIOMETRICS_PORT}:5432"
     volumes:
       - postgres_biometrics_data:/var/lib/postgresql/data
+      - ./database/postgres-biometrics:/workspace/postgres-biometrics
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_BIOMETRICS_USER} -d ${POSTGRES_BIOMETRICS_DB}"]
       interval: 10s
@@ -45,6 +47,7 @@ services:
       - "${MINIO_CONSOLE_PORT}:9001"
     volumes:
       - minio_data:/data
+      - ./storage/minio:/workspace/minio
 
   mosquitto:
     image: eclipse-mosquitto:2
@@ -53,7 +56,7 @@ services:
       - "${MQTT_PORT}:1883"
       - "${MQTT_WS_PORT}:9001"
     volumes:
-      - ./infra/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./iot/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
 
   nodered:
     image: nodered/node-red:latest
@@ -62,12 +65,12 @@ services:
       - "${NODERED_PORT}:1880"
     volumes:
       - nodered_data:/data
-      - ./infra/nodered/flows.json:/data/flows.json
+      - ./iot/nodered/flows.json:/data/flows.json
     depends_on:
       - mosquitto
 
   api-gateway:
-    build: ./services/api_gateway
+    build: ./backend/services/api_gateway
     container_name: parking-api-gateway
     env_file: .env
     ports:
@@ -84,14 +87,14 @@ services:
       - media-service
 
   auth-service:
-    build: ./services/auth_service
+    build: ./backend/services/auth_service
     container_name: parking-auth-service
     env_file: .env
     ports:
       - "${AUTH_SERVICE_PORT}:8000"
 
   identity-service:
-    build: ./services/identity_service
+    build: ./backend/services/identity_service
     container_name: parking-identity-service
     env_file: .env
     ports:
@@ -100,7 +103,7 @@ services:
       - postgres-core
 
   parking-session-service:
-    build: ./services/parking_session_service
+    build: ./backend/services/parking_session_service
     container_name: parking-session-service
     env_file: .env
     ports:
@@ -109,7 +112,7 @@ services:
       - postgres-core
 
   payment-service:
-    build: ./services/payment_service
+    build: ./backend/services/payment_service
     container_name: parking-payment-service
     env_file: .env
     ports:
@@ -118,7 +121,7 @@ services:
       - postgres-core
 
   face-service:
-    build: ./services/facial_recognition_service
+    build: ./backend/services/facial_recognition_service
     container_name: parking-face-service
     env_file: .env
     ports:
@@ -128,7 +131,7 @@ services:
       - minio
 
   plate-service:
-    build: ./services/plate_recognition_service
+    build: ./backend/services/plate_recognition_service
     container_name: parking-plate-service
     env_file: .env
     ports:
@@ -137,14 +140,14 @@ services:
       - minio
 
   liveness-service:
-    build: ./services/liveness_service
+    build: ./backend/services/liveness_service
     container_name: parking-liveness-service
     env_file: .env
     ports:
       - "${LIVENESS_SERVICE_PORT}:8000"
 
   iot-service:
-    build: ./services/iot_service
+    build: ./backend/services/iot_service
     container_name: parking-iot-service
     env_file: .env
     ports:
@@ -153,7 +156,7 @@ services:
       - mosquitto
 
   media-service:
-    build: ./services/media_service
+    build: ./backend/services/media_service
     container_name: parking-media-service
     env_file: .env
     ports:

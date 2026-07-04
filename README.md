@@ -1,77 +1,81 @@
-# Sistema Inteligente de Parqueaderos Universitarios
+# Smart Parking University
 
-Base inicial de un sistema mobile-first, multiuniversidad y orientado a microservicios para controlar ingresos y salidas de parqueaderos universitarios.
+Repositorio inicial del sistema Smart Parking University: una plataforma mobile-first, multiuniversidad y basada en microservicios para controlar accesos de parqueaderos en universidades, campus y puertas distribuidas.
 
-Esta primera fase deja listo el esqueleto del repositorio, la arquitectura inicial, contratos API mock, documentacion y un entorno local con Docker Compose. Todavia no incluye logica real de IA; los servicios de reconocimiento facial, placas y liveness responden con comportamiento simulado para acelerar el desarrollo por fases.
+En esta Fase 1 dejamos la base del proyecto lista para evolucionar por etapas: estructura del repositorio, servicios backend mock con FastAPI, documentacion funcional, archivos de entorno y `docker-compose` con la infraestructura principal. Todavia no hay reconocimiento facial real ni lectura real de placas; esos componentes quedan preparados como mocks.
 
-## Objetivos de esta fase
+## Objetivo del sistema
 
-- Definir una estructura de monorepo clara y escalable.
-- Separar responsabilidades por microservicio.
-- Preparar documentacion para exposicion universitaria.
-- Levantar un entorno local ejecutable con FastAPI, PostgreSQL, MinIO, MQTT y Node-RED.
-- Dejar contratos base para entrada, salida, validacion biometrica, pagos e IoT.
+El sistema debe permitir que un vehiculo entre por una puerta y salga por otra, validando placa, rostro, permisos, sesion de parqueo, pago y reglas operativas antes de abrir la barrera.
 
-## Estructura propuesta del repositorio
+El producto esta pensado para dos flujos:
+
+- Visitantes: crean una sesion temporal al ingresar y deben validar rostro, placa y pago al salir.
+- Estudiantes, docentes y trabajadores: usan placas previamente autorizadas y su rostro debe coincidir con una persona habilitada para ese vehiculo.
+
+## Estructura inicial del repositorio
 
 ```text
 parqueadero/
-|-- apps/
-|   `-- mobile_app/
-|-- docs/
-|   |-- api-contracts/
-|   |-- architecture/
-|   |-- diagrams/
-|   `-- phases/
-|-- infra/
-|   |-- docker/
+|-- backend/
+|   |-- services/
+|   |   |-- api_gateway/
+|   |   |-- auth_service/
+|   |   |-- identity_service/
+|   |   |-- parking_session_service/
+|   |   |-- payment_service/
+|   |   |-- facial_recognition_service/
+|   |   |-- plate_recognition_service/
+|   |   |-- liveness_service/
+|   |   |-- media_service/
+|   |   |-- iot_service/
+|   |   `-- shared/
+|   `-- README.md
+|-- mobile/
+|   |-- app/
+|   `-- README.md
+|-- iot/
 |   |-- mqtt/
-|   `-- nodered/
+|   |-- nodered/
+|   |-- thingsboard/
+|   |-- esp32/
+|   `-- README.md
+|-- database/
+|   |-- postgres-core/
+|   |-- postgres-biometrics/
+|   |-- schemas/
+|   `-- README.md
+|-- storage/
+|   |-- minio/
+|   `-- README.md
+|-- docs/
+|   |-- architecture.md
+|   |-- mobile-flow.md
+|   |-- security.md
+|   |-- database-design.md
+|   `-- iot-flow.md
 |-- scripts/
-|-- services/
-|   |-- api_gateway/
-|   |-- auth_service/
-|   |-- facial_recognition_service/
-|   |-- identity_service/
-|   |-- iot_service/
-|   |-- liveness_service/
-|   |-- media_service/
-|   |-- parking_session_service/
-|   |-- payment_service/
-|   |-- plate_recognition_service/
-|   `-- shared/
 |-- .env.example
 `-- docker-compose.yml
 ```
 
-## Microservicios incluidos
+## Que incluye esta fase
 
-- `api_gateway`: punto de entrada HTTP para cliente movil y futuros paneles.
-- `auth_service`: autenticacion, JWT, roles y permisos.
-- `identity_service`: personas, afiliaciones, placas autorizadas y vigencias.
-- `parking_session_service`: sesiones de entrada/salida y reglas operativas.
-- `payment_service`: validacion de pagos de visitantes.
-- `facial_recognition_service`: verificacion facial mock.
-- `plate_recognition_service`: lectura de placas mock.
-- `liveness_service`: validacion antispoofing mock.
-- `media_service`: carga y referencia de imagenes en MinIO.
-- `iot_service`: publicacion de eventos y apertura de barreras por MQTT.
+- Backend preparado con microservicios mock en FastAPI.
+- Estructura base para app movil Flutter.
+- Base para integracion IoT con MQTT, Node-RED, ThingsBoard y ESP32.
+- Diseño inicial de bases de datos principal y biometrica.
+- Almacenamiento previsto con MinIO.
+- Documentacion inicial para desarrollo y exposicion.
 
-## Infraestructura incluida
+## Infraestructura prevista
 
-- `postgres-core`: base principal transaccional.
-- `postgres-biometrics`: base aislada para biometria y `pgvector`.
-- `minio`: almacenamiento de imagenes.
-- `mosquitto`: broker MQTT para dispositivos y barreras.
-- `nodered`: maquetado de flujos IoT e integracion.
-
-## Estado actual
-
-- Backend base en FastAPI por servicio.
-- Servicios de IA simulados.
-- Contratos API iniciales en `docs/api-contracts/`.
-- Compose listo para orquestar contenedores locales.
-- Carpeta de app Flutter preparada, sin implementacion aun.
+- PostgreSQL principal para datos transaccionales.
+- PostgreSQL biometrico separado para embeddings y metadata sensible.
+- MinIO para imagenes y evidencia operativa.
+- Mosquitto como broker MQTT.
+- Node-RED para maquetado e integracion rapida.
+- ThingsBoard como integracion opcional futura.
 
 ## Puesta en marcha
 
@@ -79,7 +83,7 @@ parqueadero/
 
 - Docker Desktop iniciado
 - Docker Compose disponible
-- Puerto 5432, 5433, 8000-8009, 9000-9002 y 1880 libres
+- Puertos `5432`, `5433`, `8000-8009`, `1880`, `1883`, `9000`, `9001` y `9002` libres
 
 ### Arranque rapido
 
@@ -89,46 +93,26 @@ parqueadero/
 
 ### Arranque manual
 
-1. Copiar variables de entorno:
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
 
-   ```powershell
-   Copy-Item .env.example .env
-   ```
+## Documentacion principal
 
-2. Levantar el entorno:
+- [Arquitectura general](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\architecture.md)
+- [Flujo mobile de entrada y salida](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\mobile-flow.md)
+- [Seguridad y proteccion de datos](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\security.md)
+- [Diseño de base de datos](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\database-design.md)
+- [Flujo IoT](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\iot-flow.md)
 
-   ```powershell
-   docker compose up --build
-   ```
+## Estado de los mocks
 
-3. Probar salud de servicios:
+- `facial_recognition_service`: devuelve verificacion simulada.
+- `plate_recognition_service`: devuelve placa simulada.
+- `liveness_service`: devuelve validacion simulada.
+- `iot_service`: simula la publicacion de comando de apertura.
 
-   - Gateway: `http://localhost:8000/health`
-   - Auth: `http://localhost:8001/health`
-   - Identity: `http://localhost:8002/health`
-   - Parking Sessions: `http://localhost:8003/health`
-   - Payment: `http://localhost:8004/health`
-   - Face: `http://localhost:8005/health`
-   - Plate: `http://localhost:8006/health`
-   - Liveness: `http://localhost:8007/health`
-   - IoT: `http://localhost:8008/health`
-   - Media: `http://localhost:8009/health`
-   - Node-RED: `http://localhost:1880`
-   - MinIO Console: `http://localhost:9001`
+## Siguiente paso recomendado
 
-## Documentacion
-
-- Arquitectura general: [docs/architecture/overview.md](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\architecture\overview.md)
-- Descripcion de microservicios: [docs/architecture/microservices.md](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\architecture\microservices.md)
-- Diagramas: [docs/diagrams/system-context.md](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\diagrams\system-context.md)
-- Contratos API: [docs/api-contracts/README.md](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\api-contracts\README.md)
-- Alcance de la fase 1: [docs/phases/phase-01-foundation.md](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\phases\phase-01-foundation.md)
-
-## Siguientes fases sugeridas
-
-1. Scaffold real de la app Flutter y flujos de captura.
-2. Persistencia real en PostgreSQL y pgvector.
-3. Gateway con orquestacion entre servicios.
-4. Seguridad completa con JWT, RBAC y auditoria.
-5. Integracion real con ESP32, MQTT y barreras.
-6. IA real para rostro, placa y liveness.
+La siguiente fase natural es modelar dominio real y persistencia: universidades, campus, puertas, personas, placas autorizadas, sesiones, pagos y auditoria.
