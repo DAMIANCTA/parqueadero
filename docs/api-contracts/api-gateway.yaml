@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info:
+  title: API Gateway
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Service healthy
+  /api/v1/catalog:
+    get:
+      summary: Available internal services
+      responses:
+        "200":
+          description: Catalog returned

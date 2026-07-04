@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: Auth Service
+  version: 0.1.0
+paths:
+  /api/v1/auth/token:
+    post:
+      summary: Issue mock access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Token issued

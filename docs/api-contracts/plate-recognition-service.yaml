@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: Plate Recognition Service
+  version: 0.1.0
+paths:
+  /api/v1/plates/detect:
+    post:
+      summary: Detect vehicle plate from image
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [image_uri]
+              properties:
+                image_uri:
+                  type: string
+                country_code:
+                  type: string
+      responses:
+        "200":
+          description: Plate detection returned

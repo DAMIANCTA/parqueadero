@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: Liveness Service
+  version: 0.1.0
+paths:
+  /api/v1/liveness/check:
+    post:
+      summary: Perform liveness validation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [face_image_uri]
+              properties:
+                face_image_uri:
+                  type: string
+                challenge_type:
+                  type: string
+      responses:
+        "200":
+          description: Liveness result returned

@@ -1,0 +1,31 @@
+openapi: 3.0.3
+info:
+  title: IoT Service
+  version: 0.1.0
+paths:
+  /api/v1/gates/{gate_id}/open:
+    post:
+      summary: Publish gate open command
+      parameters:
+        - in: path
+          name: gate_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                session_id:
+                  type: string
+                plate:
+                  type: string
+      responses:
+        "200":
+          description: Command published

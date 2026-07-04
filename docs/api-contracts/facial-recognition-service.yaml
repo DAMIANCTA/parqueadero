@@ -1,0 +1,26 @@
+openapi: 3.0.3
+info:
+  title: Facial Recognition Service
+  version: 0.1.0
+paths:
+  /api/v1/faces/verify:
+    post:
+      summary: Verify if two face references match
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entry_face_reference, exit_face_reference]
+              properties:
+                subject_id:
+                  type: string
+                  nullable: true
+                entry_face_reference:
+                  type: string
+                exit_face_reference:
+                  type: string
+      responses:
+        "200":
+          description: Match result returned

@@ -1,0 +1,25 @@
+openapi: 3.0.3
+info:
+  title: Media Service
+  version: 0.1.0
+paths:
+  /api/v1/media/presign-upload:
+    post:
+      summary: Generate mock upload URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [object_name, content_type, category]
+              properties:
+                object_name:
+                  type: string
+                content_type:
+                  type: string
+                category:
+                  type: string
+      responses:
+        "200":
+          description: Mock URL generated

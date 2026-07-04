@@ -1,0 +1,53 @@
+openapi: 3.0.3
+info:
+  title: Parking Session Service
+  version: 0.1.0
+paths:
+  /api/v1/sessions/entry:
+    post:
+      summary: Create parking entry session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [university_id, campus_id, gate_id, plate, face_reference, actor_type]
+              properties:
+                university_id:
+                  type: string
+                campus_id:
+                  type: string
+                gate_id:
+                  type: string
+                plate:
+                  type: string
+                face_reference:
+                  type: string
+                actor_type:
+                  type: string
+      responses:
+        "200":
+          description: Entry authorized
+  /api/v1/sessions/exit-check:
+    post:
+      summary: Validate parking exit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_id, plate, face_reference, payment_confirmed]
+              properties:
+                session_id:
+                  type: string
+                plate:
+                  type: string
+                face_reference:
+                  type: string
+                payment_confirmed:
+                  type: boolean
+      responses:
+        "200":
+          description: Exit validation returned

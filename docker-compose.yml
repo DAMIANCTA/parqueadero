@@ -1,0 +1,168 @@
+services:
+  postgres-core:
+    image: postgres:16
+    container_name: parking-postgres-core
+    environment:
+      POSTGRES_DB: ${POSTGRES_CORE_DB}
+      POSTGRES_USER: ${POSTGRES_CORE_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_CORE_PASSWORD}
+    ports:
+      - "${POSTGRES_CORE_PORT}:5432"
+    volumes:
+      - postgres_core_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_CORE_USER} -d ${POSTGRES_CORE_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-biometrics:
+    image: pgvector/pgvector:pg16
+    container_name: parking-postgres-biometrics
+    environment:
+      POSTGRES_DB: ${POSTGRES_BIOMETRICS_DB}
+      POSTGRES_USER: ${POSTGRES_BIOMETRICS_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_BIOMETRICS_PASSWORD}
+    ports:
+      - "${POSTGRES_BIOMETRICS_PORT}:5432"
+    volumes:
+      - postgres_biometrics_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_BIOMETRICS_USER} -d ${POSTGRES_BIOMETRICS_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: parking-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${MINIO_API_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    volumes:
+      - minio_data:/data
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: parking-mosquitto
+    ports:
+      - "${MQTT_PORT}:1883"
+      - "${MQTT_WS_PORT}:9001"
+    volumes:
+      - ./infra/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  nodered:
+    image: nodered/node-red:latest
+    container_name: parking-nodered
+    ports:
+      - "${NODERED_PORT}:1880"
+    volumes:
+      - nodered_data:/data
+      - ./infra/nodered/flows.json:/data/flows.json
+    depends_on:
+      - mosquitto
+
+  api-gateway:
+    build: ./services/api_gateway
+    container_name: parking-api-gateway
+    env_file: .env
+    ports:
+      - "${API_GATEWAY_PORT}:8000"
+    depends_on:
+      - auth-service
+      - identity-service
+      - parking-session-service
+      - payment-service
+      - face-service
+      - plate-service
+      - liveness-service
+      - iot-service
+      - media-service
+
+  auth-service:
+    build: ./services/auth_service
+    container_name: parking-auth-service
+    env_file: .env
+    ports:
+      - "${AUTH_SERVICE_PORT}:8000"
+
+  identity-service:
+    build: ./services/identity_service
+    container_name: parking-identity-service
+    env_file: .env
+    ports:
+      - "${IDENTITY_SERVICE_PORT}:8000"
+    depends_on:
+      - postgres-core
+
+  parking-session-service:
+    build: ./services/parking_session_service
+    container_name: parking-session-service
+    env_file: .env
+    ports:
+      - "${PARKING_SESSION_SERVICE_PORT}:8000"
+    depends_on:
+      - postgres-core
+
+  payment-service:
+    build: ./services/payment_service
+    container_name: parking-payment-service
+    env_file: .env
+    ports:
+      - "${PAYMENT_SERVICE_PORT}:8000"
+    depends_on:
+      - postgres-core
+
+  face-service:
+    build: ./services/facial_recognition_service
+    container_name: parking-face-service
+    env_file: .env
+    ports:
+      - "${FACIAL_RECOGNITION_SERVICE_PORT}:8000"
+    depends_on:
+      - postgres-biometrics
+      - minio
+
+  plate-service:
+    build: ./services/plate_recognition_service
+    container_name: parking-plate-service
+    env_file: .env
+    ports:
+      - "${PLATE_RECOGNITION_SERVICE_PORT}:8000"
+    depends_on:
+      - minio
+
+  liveness-service:
+    build: ./services/liveness_service
+    container_name: parking-liveness-service
+    env_file: .env
+    ports:
+      - "${LIVENESS_SERVICE_PORT}:8000"
+
+  iot-service:
+    build: ./services/iot_service
+    container_name: parking-iot-service
+    env_file: .env
+    ports:
+      - "${IOT_SERVICE_PORT}:8000"
+    depends_on:
+      - mosquitto
+
+  media-service:
+    build: ./services/media_service
+    container_name: parking-media-service
+    env_file: .env
+    ports:
+      - "${MEDIA_SERVICE_PORT}:8000"
+    depends_on:
+      - minio
+
+volumes:
+  postgres_core_data:
+  postgres_biometrics_data:
+  minio_data:
+  nodered_data:

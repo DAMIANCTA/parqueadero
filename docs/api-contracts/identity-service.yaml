@@ -1,0 +1,29 @@
+openapi: 3.0.3
+info:
+  title: Identity Service
+  version: 0.1.0
+paths:
+  /api/v1/plates/{plate}:
+    get:
+      summary: Get plate and authorized people
+      parameters:
+        - in: path
+          name: plate
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plate found
+  /api/v1/people/{person_id}:
+    get:
+      summary: Get person record
+      parameters:
+        - in: path
+          name: person_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Person found

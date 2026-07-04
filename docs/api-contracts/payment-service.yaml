@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info:
+  title: Payment Service
+  version: 0.1.0
+paths:
+  /api/v1/payments/sessions/{session_id}/status:
+    get:
+      summary: Get payment status for visitor session
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payment status returned

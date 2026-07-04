@@ -1,0 +1,9 @@
+[
+  {
+    "id": "parking-flow-tab",
+    "type": "tab",
+    "label": "Parking Demo",
+    "disabled": false,
+    "info": "Base flow placeholder for parking IoT demos."
+  }
+]

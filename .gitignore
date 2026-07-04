@@ -1,0 +1,16 @@
+.env
+__pycache__/
+.pytest_cache/
+*.pyc
+.venv/
+venv/
+dist/
+build/
+.dart_tool/
+.idea/
+.vscode/
+node_modules/
+minio_data/
+postgres_core_data/
+postgres_biometrics_data/
+nodered_data/
