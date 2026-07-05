@@ -70,6 +70,14 @@
 - `biometric_access_logs`: bitacora de verificaciones biometricas y decisiones de acceso.
 - Las imagenes no se guardan dentro de PostgreSQL; solo se almacena su referencia segura y metadatos de integridad.
 
+## Flujo actual de `face-service`
+
+- `POST /faces/enroll` registra una referencia de imagen en MinIO, genera embedding y deja la plantilla en la base biometrica.
+- `POST /faces/verify` compara una imagen de prueba contra una plantilla enrolada usando similitud configurable.
+- `POST /faces/compare` compara dos referencias de imagen sin tocar la base principal.
+- `POST /faces/liveness-check` registra score y decision de prueba de vida en la bitacora biometrica.
+- En todos los casos el contrato trabaja con referencias a MinIO y metadatos biometricos; no con fotos persistidas en la base transaccional principal.
+
 ## Liveness y proteccion anti-spoofing
 
 - La app movil ejecuta un reto dinamico antes de enviar la solicitud de acceso.

@@ -110,7 +110,7 @@ docker compose up --build
 
 ## Estado de los mocks
 
-- `face-service`: devuelve una verificacion facial simulada.
+- `face-service`: expone `POST /faces/enroll`, `POST /faces/verify`, `POST /faces/compare` y `POST /faces/liveness-check`, con modo `mock` y modo `real` preparado para InsightFace, DeepFace o CompreFace.
 - `plate-service`: expone `POST /plates/detect`, acepta imagen multipart y soporta modo `mock` o `real` preparado para YOLO + OCR.
 - `parking-service`: devuelve una sesion simulada.
 - `payment-service`: permite buscar sesiones, calcular tarifa y registrar pagos simulados.

@@ -4,4 +4,5 @@ class MockRepository:
             "match": True,
             "model_name": "mock-face-model",
             "quality_score": 0.98,
+            "mode": "mock",
         }

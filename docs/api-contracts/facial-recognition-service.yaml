@@ -3,24 +3,105 @@ info:
   title: Facial Recognition Service
   version: 0.1.0
 paths:
-  /api/v1/faces/verify:
+  /faces/enroll:
     post:
-      summary: Verify if two face references match
+      summary: Enroll face template from MinIO image reference
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [entry_face_reference, exit_face_reference]
+              required: [university_id, person_id, image_reference]
               properties:
-                subject_id:
+                university_id:
+                  type: string
+                person_id:
+                  type: string
+                encrypted:
+                  type: boolean
+                expires_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                quality_score_hint:
+                  type: number
+                  format: float
+                  nullable: true
+                image_reference:
+                  $ref: "#/components/schemas/MinioImageReference"
+      responses:
+        "200":
+          description: Enrollment result returned
+  /faces/verify:
+    post:
+      summary: Verify face image against enrolled template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [university_id, person_id, probe_image_reference]
+              properties:
+                university_id:
+                  type: string
+                person_id:
+                  type: string
+                template_id:
                   type: string
                   nullable: true
-                entry_face_reference:
-                  type: string
-                exit_face_reference:
-                  type: string
+                similarity_threshold:
+                  type: number
+                  format: float
+                  nullable: true
+                probe_image_reference:
+                  $ref: "#/components/schemas/MinioImageReference"
       responses:
         "200":
           description: Match result returned
+  /faces/compare:
+    post:
+      summary: Compare two face image references
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_image_reference, target_image_reference]
+              properties:
+                university_id:
+                  type: string
+                  nullable: true
+                similarity_threshold:
+                  type: number
+                  format: float
+                  nullable: true
+                source_image_reference:
+                  $ref: "#/components/schemas/MinioImageReference"
+                target_image_reference:
+                  $ref: "#/components/schemas/MinioImageReference"
+      responses:
+        "200":
+          description: Match result returned
+components:
+  schemas:
+    MinioImageReference:
+      type: object
+      required: [bucket, object_path]
+      properties:
+        bucket:
+          type: string
+        object_path:
+          type: string
+        object_version:
+          type: string
+          nullable: true
+        sha256_hash:
+          type: string
+          nullable: true
+        content_type:
+          type: string
+        image_type:
+          type: string

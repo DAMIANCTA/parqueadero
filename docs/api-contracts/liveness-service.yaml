@@ -3,21 +3,51 @@ info:
   title: Liveness Service
   version: 0.1.0
 paths:
-  /api/v1/liveness/check:
+  /faces/liveness-check:
     post:
-      summary: Perform liveness validation
+      summary: Perform liveness validation from MinIO image reference
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [face_image_uri]
+              required: [image_reference]
               properties:
-                face_image_uri:
+                university_id:
                   type: string
+                  nullable: true
+                person_id:
+                  type: string
+                  nullable: true
+                image_reference:
+                  $ref: "#/components/schemas/MinioImageReference"
                 challenge_type:
                   type: string
+                liveness_threshold:
+                  type: number
+                  format: float
+                  nullable: true
       responses:
         "200":
           description: Liveness result returned
+components:
+  schemas:
+    MinioImageReference:
+      type: object
+      required: [bucket, object_path]
+      properties:
+        bucket:
+          type: string
+        object_path:
+          type: string
+        object_version:
+          type: string
+          nullable: true
+        sha256_hash:
+          type: string
+          nullable: true
+        content_type:
+          type: string
+        image_type:
+          type: string
