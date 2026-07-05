@@ -4,6 +4,277 @@
     "type": "tab",
     "label": "Parking Demo",
     "disabled": false,
-    "info": "Base flow placeholder for parking IoT demos."
+    "info": "MQTT gate simulation for Smart Parking University."
+  },
+  {
+    "id": "parking-mqtt-broker",
+    "type": "mqtt-broker",
+    "name": "Mosquitto",
+    "broker": "mosquitto",
+    "port": "1883",
+    "clientid": "nodered-smart-parking",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true,
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthPayload": "",
+    "closeTopic": "",
+    "closeQos": "0",
+    "closePayload": "",
+    "willTopic": "",
+    "willQos": "0",
+    "willPayload": "",
+    "userProps": "",
+    "sessionExpiry": ""
+  },
+  {
+    "id": "mqtt-cmd-in",
+    "type": "mqtt in",
+    "z": "parking-flow-tab",
+    "name": "Gate commands",
+    "topic": "universities/+/campuses/+/gates/+/cmd",
+    "qos": "0",
+    "datatype": "auto-detect",
+    "broker": "parking-mqtt-broker",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 140,
+    "y": 80,
+    "wires": [
+      [
+        "json-cmd"
+      ]
+    ]
+  },
+  {
+    "id": "json-cmd",
+    "type": "json",
+    "z": "parking-flow-tab",
+    "name": "Parse command JSON",
+    "property": "payload",
+    "action": "",
+    "pretty": false,
+    "x": 350,
+    "y": 80,
+    "wires": [
+      [
+        "track-command",
+        "debug-command"
+      ]
+    ]
+  },
+  {
+    "id": "track-command",
+    "type": "function",
+    "z": "parking-flow-tab",
+    "name": "Track gate command",
+    "func": "const parts = (msg.topic || '').split('/');\nconst universityId = parts[1] || 'unknown';\nconst campusId = parts[3] || 'unknown';\nconst gateId = parts[5] || 'unknown';\nconst payload = msg.payload || {};\nconst key = `${universityId}/${campusId}/${gateId}`;\nconst stateMap = flow.get('gateStates') || {};\nconst statusTopic = `universities/${universityId}/campuses/${campusId}/gates/${gateId}/status`;\nconst eventTime = new Date().toISOString();\nstateMap[key] = {\n    university_id: universityId,\n    campus_id: campusId,\n    gate_id: gateId,\n    plate: payload.plate || '-',\n    barrier: payload.command === 'open' ? 'opening' : 'idle',\n    reason: payload.reason || '-',\n    last_event: `${payload.command || 'unknown'} requested at ${eventTime}`,\n    session_id: payload.session_id || '-',\n    device_status: 'waiting_status',\n    updated_at: eventTime,\n    cmd_topic: msg.topic,\n    status_topic: statusTopic\n};\nflow.set('gateStates', stateMap);\nmsg.gateContext = stateMap[key];\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 590,
+    "y": 80,
+    "wires": [
+      [
+        "build-status"
+      ]
+    ]
+  },
+  {
+    "id": "build-status",
+    "type": "function",
+    "z": "parking-flow-tab",
+    "name": "Build status",
+    "func": "const gate = msg.gateContext;\nmsg.topic = gate.status_topic;\nmsg.payload = {\n    barrier: 'open',\n    device_status: 'online',\n    university_id: gate.university_id,\n    campus_id: gate.campus_id,\n    gate_id: gate.gate_id,\n    plate: gate.plate,\n    reason: gate.reason,\n    last_event: gate.last_event,\n    updated_at: new Date().toISOString()\n};\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 810,
+    "y": 80,
+    "wires": [
+      [
+        "mqtt-status-out",
+        "debug-status-out"
+      ]
+    ]
+  },
+  {
+    "id": "mqtt-status-out",
+    "type": "mqtt out",
+    "z": "parking-flow-tab",
+    "name": "Publish status",
+    "topic": "",
+    "qos": "0",
+    "retain": "false",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "parking-mqtt-broker",
+    "x": 1030,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "mqtt-status-in",
+    "type": "mqtt in",
+    "z": "parking-flow-tab",
+    "name": "Gate status",
+    "topic": "universities/+/campuses/+/gates/+/status",
+    "qos": "0",
+    "datatype": "auto-detect",
+    "broker": "parking-mqtt-broker",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 140,
+    "y": 160,
+    "wires": [
+      [
+        "json-status"
+      ]
+    ]
+  },
+  {
+    "id": "json-status",
+    "type": "json",
+    "z": "parking-flow-tab",
+    "name": "Parse status JSON",
+    "property": "payload",
+    "action": "",
+    "pretty": false,
+    "x": 350,
+    "y": 160,
+    "wires": [
+      [
+        "track-status",
+        "debug-status-in"
+      ]
+    ]
+  },
+  {
+    "id": "track-status",
+    "type": "function",
+    "z": "parking-flow-tab",
+    "name": "Track gate status",
+    "func": "const parts = (msg.topic || '').split('/');\nconst universityId = parts[1] || 'unknown';\nconst campusId = parts[3] || 'unknown';\nconst gateId = parts[5] || 'unknown';\nconst payload = msg.payload || {};\nconst key = `${universityId}/${campusId}/${gateId}`;\nconst stateMap = flow.get('gateStates') || {};\nconst current = stateMap[key] || {\n    university_id: universityId,\n    campus_id: campusId,\n    gate_id: gateId,\n    plate: payload.plate || '-',\n    reason: payload.reason || '-',\n    session_id: '-',\n    cmd_topic: `universities/${universityId}/campuses/${campusId}/gates/${gateId}/cmd`,\n    status_topic: msg.topic\n};\ncurrent.barrier = payload.barrier || current.barrier || 'unknown';\ncurrent.device_status = payload.device_status || current.device_status || 'unknown';\ncurrent.plate = payload.plate || current.plate || '-';\ncurrent.reason = payload.reason || current.reason || '-';\ncurrent.last_event = payload.last_event || `status updated at ${new Date().toISOString()}`;\ncurrent.updated_at = payload.updated_at || new Date().toISOString();\nstateMap[key] = current;\nflow.set('gateStates', stateMap);\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 590,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "http-dashboard",
+    "type": "http in",
+    "z": "parking-flow-tab",
+    "name": "IoT dashboard",
+    "url": "/parking-dashboard",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 280,
+    "wires": [
+      [
+        "render-dashboard"
+      ]
+    ]
+  },
+  {
+    "id": "render-dashboard",
+    "type": "function",
+    "z": "parking-flow-tab",
+    "name": "Render dashboard",
+    "func": "function escapeHtml(value) {\n    return String(value ?? '-')\n        .replace(/&/g, '&amp;')\n        .replace(/</g, '&lt;')\n        .replace(/>/g, '&gt;')\n        .replace(/\\\"/g, '&quot;')\n        .replace(/'/g, '&#39;');\n}\nconst stateMap = flow.get('gateStates') || {};\nconst rows = Object.values(stateMap)\n    .sort((a, b) => String(a.gate_id).localeCompare(String(b.gate_id)))\n    .map((gate) => `\n        <tr>\n            <td>${escapeHtml(gate.university_id)}</td>\n            <td>${escapeHtml(gate.campus_id)}</td>\n            <td>${escapeHtml(gate.gate_id)}</td>\n            <td>${escapeHtml(gate.plate)}</td>\n            <td>${escapeHtml(gate.barrier)}</td>\n            <td>${escapeHtml(gate.reason)}</td>\n            <td>${escapeHtml(gate.last_event)}</td>\n        </tr>`)\n    .join('');\nmsg.headers = { 'Content-Type': 'text/html; charset=utf-8' };\nmsg.payload = `<!DOCTYPE html>\n<html>\n<head>\n    <meta charset=\"utf-8\" />\n    <meta http-equiv=\"refresh\" content=\"3\" />\n    <title>Smart Parking IoT Dashboard</title>\n    <style>\n        body { font-family: Arial, sans-serif; margin: 24px; background: #f5f7fb; color: #162033; }\n        h1 { margin-bottom: 8px; }\n        p { margin-top: 0; color: #4a5b77; }\n        table { width: 100%; border-collapse: collapse; background: #ffffff; }\n        th, td { padding: 12px; border-bottom: 1px solid #d7deea; text-align: left; vertical-align: top; }\n        th { background: #e9eef8; }\n        .empty { padding: 24px; background: #ffffff; border: 1px solid #d7deea; }\n        .meta { margin-top: 16px; font-size: 13px; color: #5a6780; }\n    </style>\n</head>\n<body>\n    <h1>Smart Parking University - IoT Demo</h1>\n    <p>Vista simple de Node-RED para comandos MQTT y estado de barrera por universidad, campus y puerta.</p>\n    ${rows ? `<table>\n        <thead>\n            <tr>\n                <th>Universidad</th>\n                <th>Campus</th>\n                <th>Puerta</th>\n                <th>Placa</th>\n                <th>Estado de barrera</th>\n                <th>Motivo de apertura</th>\n                <th>Ultimo evento</th>\n            </tr>\n        </thead>\n        <tbody>${rows}</tbody>\n    </table>` : '<div class=\"empty\">Aun no hay eventos MQTT recibidos.</div>'}\n    <div class=\"meta\">Refresca automaticamente cada 3 segundos. Ruta Node-RED: /parking-dashboard</div>\n</body>\n</html>`;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 280,
+    "wires": [
+      [
+        "http-response"
+      ]
+    ]
+  },
+  {
+    "id": "http-response",
+    "type": "http response",
+    "z": "parking-flow-tab",
+    "name": "HTTP response",
+    "statusCode": "",
+    "headers": {},
+    "x": 620,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "debug-command",
+    "type": "debug",
+    "z": "parking-flow-tab",
+    "name": "Debug command",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 590,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "debug-status-out",
+    "type": "debug",
+    "z": "parking-flow-tab",
+    "name": "Debug published status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1060,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "debug-status-in",
+    "type": "debug",
+    "z": "parking-flow-tab",
+    "name": "Debug status in",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 580,
+    "y": 200,
+    "wires": []
   }
 ]

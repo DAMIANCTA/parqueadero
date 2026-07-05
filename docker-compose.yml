@@ -63,6 +63,8 @@ services:
   nodered:
     image: nodered/node-red:latest
     container_name: parking-nodered
+    environment:
+      FLOWS: flows.json
     ports:
       - "${NODERED_PORT}:1880"
     volumes:

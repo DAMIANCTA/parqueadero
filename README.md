@@ -114,8 +114,14 @@ docker compose up --build
 - `plate-service`: devuelve una deteccion de placa simulada.
 - `parking-service`: devuelve una sesion simulada.
 - `payment-service`: permite buscar sesiones, calcular tarifa y registrar pagos simulados.
-- `iot-service`: simula la publicacion de comando de apertura.
+- `iot-service`: publica comando MQTT simulado hacia Mosquitto y Node-RED.
 - `api-gateway`: expone un catalogo mock de servicios disponibles.
+
+## Demo IoT actual
+
+- `iot-service` publica en `universities/{university_id}/campuses/{campus_id}/gates/{gate_id}/cmd`
+- Node-RED responde en `universities/{university_id}/campuses/{campus_id}/gates/{gate_id}/status`
+- Vista simple de maqueta: `http://localhost:1880/parking-dashboard`
 
 ## Siguiente paso recomendado
 

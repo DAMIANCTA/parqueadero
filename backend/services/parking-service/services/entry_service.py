@@ -72,7 +72,14 @@ class EntryService:
             plate_text=normalized_plate,
             person_type=payload.person_type,
         )
-        gate_command = self.iot_repository.open_gate(gate_id=payload.gate_id, plate_text=normalized_plate)
+        gate_command = self.iot_repository.open_gate(
+            university_id=payload.university_id,
+            campus_id=payload.campus_id,
+            gate_id=payload.gate_id,
+            plate_text=normalized_plate,
+            session_id=session_record["session_id"],
+            reason="validated",
+        )
         access_event = self.access_event_repository.create_entry_event(
             university_id=payload.university_id,
             gate_id=payload.gate_id,
