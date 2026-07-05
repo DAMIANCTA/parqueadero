@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from schemas.iot import GateOpenRequest, GateOpenResponse
+from security import require_permissions
 from services.mqtt_service import MqttService
 
 
@@ -8,7 +9,7 @@ router = APIRouter(prefix="/api/v1/gates", tags=["iot"])
 mqtt_service = MqttService()
 
 
-@router.post("/open", response_model=GateOpenResponse)
+@router.post("/open", response_model=GateOpenResponse, dependencies=[require_permissions("iot.gates.open")])
 def open_gate(command: GateOpenRequest) -> GateOpenResponse:
     try:
         payload = mqtt_service.publish_gate_open(command)

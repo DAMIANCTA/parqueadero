@@ -3,9 +3,9 @@ info:
   title: Auth Service
   version: 0.1.0
 paths:
-  /api/v1/auth/token:
+  /auth/token:
     post:
-      summary: Issue mock access token
+      summary: Issue signed access token
       requestBody:
         required: true
         content:
@@ -21,3 +21,9 @@ paths:
       responses:
         "200":
           description: Token issued
+  /auth/me:
+    get:
+      summary: Return current authenticated user
+      responses:
+        "200":
+          description: Current user returned

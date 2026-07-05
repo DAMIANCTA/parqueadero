@@ -2,13 +2,14 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from config import settings
 from schemas.plates import PlateDetectResponse
+from security import require_permissions
 from services.plate_detection_service import PlateDetectionService
 
 
 router = APIRouter(tags=["plates"])
 
 
-@router.post("/plates/detect", response_model=PlateDetectResponse)
+@router.post("/plates/detect", response_model=PlateDetectResponse, dependencies=[require_permissions("plates.detect")])
 async def detect_plate(
     image: UploadFile = File(...),
     country_code: str | None = Form(default=None),

@@ -1,7 +1,8 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from config import settings
 from schemas.system import HealthResponse, MockResponse, VersionResponse
+from security import require_permissions
 from services.mock_service import MockService
 
 
@@ -24,7 +25,7 @@ def version() -> VersionResponse:
     return VersionResponse(service=settings.service_name, version=settings.service_version)
 
 
-@router.get("/api/v1/mock", response_model=MockResponse)
+@router.get("/api/v1/mock", response_model=MockResponse, dependencies=[require_permissions("auth.mock.read")])
 def mock() -> MockResponse:
     return MockResponse(
         service=settings.service_name,

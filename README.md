@@ -36,6 +36,8 @@ parqueadero/
 |-- mobile/
 |   |-- app/
 |   `-- README.md
+|-- web/
+|   `-- admin-dashboard/
 |-- iot/
 |   |-- mqtt/
 |   |-- nodered/
@@ -65,6 +67,7 @@ parqueadero/
 
 - Backend preparado con microservicios mock en FastAPI.
 - Estructura base para app movil Flutter.
+- Dashboard web administrativo simple para operacion y consulta por roles.
 - Base para integracion IoT con MQTT, Node-RED, ThingsBoard y ESP32.
 - Diseño inicial de bases de datos principal y biometrica.
 - Almacenamiento previsto con MinIO.
@@ -107,6 +110,7 @@ docker compose up --build
 - [Seguridad y proteccion de datos](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\security.md)
 - [Diseño de base de datos](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\database-design.md)
 - [Flujo IoT](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\iot-flow.md)
+- [Dashboard administrativo](C:\Users\damia\OneDrive\Documentos\parqueadero\web\admin-dashboard\index.html)
 
 ## Estado de los mocks
 
@@ -115,6 +119,7 @@ docker compose up --build
 - `parking-service`: devuelve una sesion simulada.
 - `payment-service`: permite buscar sesiones, calcular tarifa y registrar pagos simulados.
 - `iot-service`: publica comando MQTT simulado hacia Mosquitto y Node-RED.
+- `auth-service`: emite JWT, adjunta roles y permisos y protege endpoints internos.
 - `api-gateway`: expone un catalogo mock de servicios disponibles.
 
 ## Demo IoT actual

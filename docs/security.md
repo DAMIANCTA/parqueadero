@@ -10,19 +10,34 @@
 
 ## Roles base
 
-- `super_admin`: administra toda la plataforma multiuniversidad.
-- `university_admin`: administra una universidad especifica.
-- `campus_admin`: administra campus, puertas y configuraciones locales.
+- `superadmin`: administra toda la plataforma multiuniversidad.
+- `admin_university`: administra una universidad especifica.
+- `security`: supervisa accesos, enrolamientos y revisiones operativas.
+- `cashier`: consulta sesiones y registra pagos.
 - `gate_operator`: opera ingreso y salida desde dispositivos moviles.
-- `security_auditor`: consulta logs, eventos y auditoria.
-- `billing_operator`: consulta y valida pagos.
+- `student`: actor institucional sin permisos operativos internos.
+- `teacher`: actor institucional sin permisos operativos internos.
+- `employee`: actor institucional sin permisos operativos internos.
+- `visitor`: actor eventual sin permisos operativos internos.
+- `auditor`: consulta logs, eventos y auditoria.
 
 ## Autenticacion y autorizacion
 
 - JWT para autenticacion de clientes.
 - Roles y permisos por servicio.
-- Futuro soporte para refresh tokens y rotacion de llaves.
 - Validacion por ambito: universidad, campus y puerta.
+- En esta fase el token incluye `sub`, `username`, `roles`, `permissions`, `university_id`, `iat`, `exp`, `iss` y `aud`.
+- `auth-service` firma tokens de acceso y los demas microservicios validan firma, emisor, audiencia y expiracion antes de procesar la solicitud.
+
+## Controles implementados en Fase 13
+
+- JWT firmado para autenticacion.
+- RBAC por roles y permisos.
+- Middleware de autenticacion en microservicios.
+- Middleware de rate limiting basico por IP y ruta.
+- Middleware de auditoria con recoleccion local y envio interno a `audit-service`.
+- Validacion de payloads con Pydantic y contratos tipados.
+- Variables sensibles definidas por entorno y no incrustadas como claves en el codigo.
 
 ## Proteccion de datos
 
@@ -46,6 +61,14 @@
 - Registro de cambios de permisos, placas y usuarios.
 - Registro de acciones administrativas y de operadores.
 - Timestamps, actor, dispositivo, puerta, universidad y resultado de validacion.
+- `audit-service` expone recepcion interna de eventos y consulta de bitacora protegida para perfiles autorizados.
+
+## Rate limiting
+
+- Limite basico en memoria por IP y ruta.
+- Ventana y cantidad configurables por variables de entorno.
+- Se aplica para reducir abuso de autenticacion, fuerza bruta y rafagas no deseadas contra endpoints operativos.
+- `GET /health` y `GET /version` quedan fuera del limite para facilitar observabilidad.
 
 ## Separacion biometrica
 
@@ -78,6 +101,25 @@
 - `POST /faces/liveness-check` registra score y decision de prueba de vida en la bitacora biometrica.
 - En todos los casos el contrato trabaja con referencias a MinIO y metadatos biometricos; no con fotos persistidas en la base transaccional principal.
 
+## Roles y endpoints permitidos
+
+- Publico:
+  `GET /health`, `GET /version`, `POST /auth/token`
+- `superadmin`:
+  acceso a todos los endpoints protegidos
+- `admin_university`:
+  `GET /api/v1/mock` en `api-gateway`, `university-service`, `vehicle-service`, `auth-service`; `POST /parking/entry`; `POST /parking/exit`; `GET /payments/session/{plate}`; `GET /payments/session-by-qr/{qr_code}`; `GET /payments/status/{session_id}`; `POST /payments/pay`; `POST /faces/enroll`; `POST /faces/verify`; `POST /faces/compare`; `POST /faces/liveness-check`; `POST /plates/detect`; `POST /api/v1/gates/open`; `GET /audit/logs`
+- `security`:
+  `GET /api/v1/mock` en `api-gateway`, `university-service`, `vehicle-service`; `POST /parking/entry`; `POST /parking/exit`; `POST /faces/enroll`; `POST /faces/verify`; `POST /faces/compare`; `POST /faces/liveness-check`; `POST /plates/detect`; `GET /audit/logs`
+- `cashier`:
+  `GET /payments/session/{plate}`; `GET /payments/session-by-qr/{qr_code}`; `GET /payments/status/{session_id}`; `POST /payments/pay`
+- `gate_operator`:
+  `POST /parking/entry`; `POST /parking/exit`; `POST /faces/verify`; `POST /faces/compare`; `POST /faces/liveness-check`; `POST /plates/detect`; `POST /api/v1/gates/open`
+- `auditor`:
+  `GET /api/v1/mock` en `api-gateway`, `university-service`, `vehicle-service`; `GET /payments/session/{plate}`; `GET /payments/session-by-qr/{qr_code}`; `GET /payments/status/{session_id}`; `GET /audit/logs`
+- `student`, `teacher`, `employee`, `visitor`:
+  no tienen acceso a endpoints operativos internos en esta fase; pueden autenticarse pero no ejecutar acciones administrativas ni de puerta
+
 ## Liveness y proteccion anti-spoofing
 
 - La app movil ejecuta un reto dinamico antes de enviar la solicitud de acceso.
@@ -101,6 +143,6 @@
 - Los comandos de apertura deben ser auditables y firmados en fases posteriores.
 - Los modulos de liveness y captura facial deben usar solo camara frontal y pedir reintento cuando la calidad o el score sean insuficientes.
 
-## Estado en Fase 1
+## Estado en Fase 13
 
-La arquitectura ya contempla JWT, roles, auditoria, cifrado y separacion de datos, pero la implementacion completa queda para fases siguientes. En esta fase se documenta el modelo de seguridad y se dejan los servicios mock listos para crecer sin rehacer la base.
+La arquitectura ya contempla JWT, roles, auditoria, cifrado y separacion de datos. En Fase 13 ya existe una base funcional de autenticacion, RBAC, rate limiting, auditoria y separacion biometrica para seguir endureciendo el sistema en siguientes fases.
