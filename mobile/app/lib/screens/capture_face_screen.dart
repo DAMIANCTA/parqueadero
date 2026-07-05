@@ -1,6 +1,8 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
+import '../models/app_models.dart';
+import '../services/liveness/liveness_service.dart';
 import '../widgets/camera_preview_panel.dart';
 
 class CaptureFaceScreen extends StatefulWidget {
@@ -11,13 +13,18 @@ class CaptureFaceScreen extends StatefulWidget {
 }
 
 class _CaptureFaceScreenState extends State<CaptureFaceScreen> {
+  final LivenessService _livenessService = LivenessService();
   CameraController? _controller;
+  late LivenessChallenge _challenge;
   bool _ready = false;
   bool _loading = true;
+  bool _validating = false;
+  LivenessCheckResult? _lastResult;
 
   @override
   void initState() {
     super.initState();
+    _challenge = _livenessService.nextChallenge();
     _initializeCamera();
   }
 
@@ -25,7 +32,11 @@ class _CaptureFaceScreenState extends State<CaptureFaceScreen> {
     try {
       final cameras = await availableCameras();
       if (cameras.isNotEmpty) {
-        final controller = CameraController(cameras.first, ResolutionPreset.medium, enableAudio: false);
+        final selectedCamera = cameras.firstWhere(
+          (camera) => camera.lensDirection == CameraLensDirection.front,
+          orElse: () => cameras.first,
+        );
+        final controller = CameraController(selectedCamera, ResolutionPreset.medium, enableAudio: false);
         await controller.initialize();
         if (!mounted) return;
         setState(() {
@@ -50,16 +61,49 @@ class _CaptureFaceScreenState extends State<CaptureFaceScreen> {
     super.dispose();
   }
 
+  void _refreshChallenge() {
+    setState(() {
+      _challenge = _livenessService.nextChallenge();
+      _lastResult = null;
+    });
+  }
+
   Future<void> _capture() async {
+    setState(() {
+      _validating = true;
+      _lastResult = null;
+    });
+
     if (_controller != null && _controller!.value.isInitialized) {
-      await _controller!.takePicture();
+      try {
+        await _controller!.takePicture();
+      } catch (_) {}
     }
+
+    final result = await _livenessService.performCheck(
+      challenge: _challenge,
+      cameraReady: _ready,
+    );
+
     if (!mounted) return;
-    Navigator.of(context).pop('face-${DateTime.now().millisecondsSinceEpoch}');
+    if (!result.accepted) {
+      setState(() {
+        _lastResult = result;
+        _validating = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.failureReason ?? 'La validacion de liveness no fue aprobada.')),
+      );
+      return;
+    }
+
+    Navigator.of(context).pop(result);
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Captura de rostro')),
       body: Padding(
@@ -79,10 +123,70 @@ class _CaptureFaceScreenState extends State<CaptureFaceScreen> {
                 ),
               ),
             const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Reto activo', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Text(_challenge.label, style: theme.textTheme.bodyLarge),
+                  const SizedBox(height: 4),
+                  Text(_challenge.instruction),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Proveedor actual: ${_livenessService.activeProviderName}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            if (_lastResult != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _lastResult!.accepted
+                      ? Colors.green.withOpacity(0.10)
+                      : Colors.orange.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _lastResult!.accepted ? Colors.green : Colors.orange,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _lastResult!.accepted ? 'Liveness aprobado' : 'Liveness rechazado',
+                      style: theme.textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text('Score: ${_lastResult!.livenessScore.toStringAsFixed(2)}'),
+                    Text('Frames simulados: ${_lastResult!.frames.length}'),
+                    if (_lastResult!.failureReason != null) ...[
+                      const SizedBox(height: 6),
+                      Text(_lastResult!.failureReason!),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
             FilledButton.icon(
-              onPressed: _loading ? null : _capture,
-              icon: const Icon(Icons.camera_alt),
-              label: Text(_ready ? 'Capturar rostro' : 'Simular rostro'),
+              onPressed: _loading || _validating ? null : _capture,
+              icon: const Icon(Icons.verified_user),
+              label: Text(_validating ? 'Validando reto...' : 'Iniciar validacion'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _loading || _validating ? null : _refreshChallenge,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Cambiar reto'),
             ),
           ],
         ),

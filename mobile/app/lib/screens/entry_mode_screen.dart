@@ -20,10 +20,9 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
   final ApiClient _apiClient = ApiClient();
   final TextEditingController _plateController = TextEditingController();
   PersonType _personType = PersonType.visitor;
-  double _livenessScore = 0.90;
   double _plateConfidence = 0.95;
   double _faceConfidence = 0.96;
-  String? _faceImageId;
+  LivenessCheckResult? _livenessResult;
   bool _submitting = false;
 
   @override
@@ -33,11 +32,11 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
   }
 
   Future<void> _captureFace() async {
-    final result = await Navigator.of(context).push<String>(
+    final result = await Navigator.of(context).push<LivenessCheckResult>(
       MaterialPageRoute(builder: (_) => const CaptureFaceScreen()),
     );
     if (result == null || !mounted) return;
-    setState(() => _faceImageId = result);
+    setState(() => _livenessResult = result);
   }
 
   Future<void> _capturePlate() async {
@@ -50,9 +49,15 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
 
   Future<void> _submit() async {
     final selection = ParkingAppScope.of(context).selection;
-    if (selection == null || _faceImageId == null || _plateController.text.trim().isEmpty) {
+    if (selection == null || _livenessResult == null || _plateController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Completa la seleccion, rostro y placa.')),
+      );
+      return;
+    }
+    if (!_livenessResult!.accepted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La validacion de liveness debe aprobarse antes de enviar.')),
       );
       return;
     }
@@ -64,8 +69,8 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
         campusId: selection.campusId,
         gateId: selection.gateId,
         plateText: _plateController.text.trim(),
-        faceImageId: _faceImageId!,
-        livenessScore: _livenessScore,
+        faceImageId: _livenessResult!.faceImageId,
+        livenessScore: _livenessResult!.livenessScore,
         personType: _personType,
         confidencePlate: _plateConfidence,
         confidenceFace: _faceConfidence,
@@ -118,11 +123,33 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
           OutlinedButton.icon(
             onPressed: _captureFace,
             icon: const Icon(Icons.face),
-            label: Text(_faceImageId == null ? 'Captura de rostro' : 'Rostro listo'),
+            label: Text(_livenessResult == null ? 'Captura de rostro' : 'Rostro validado'),
           ),
+          if (_livenessResult != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _livenessResult!.accepted
+                    ? Colors.green.withOpacity(0.10)
+                    : Colors.orange.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _livenessResult!.accepted ? Colors.green : Colors.orange,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Reto: ${_livenessResult!.challenge.label}'),
+                  Text('Liveness: ${_livenessResult!.livenessScore.toStringAsFixed(2)}'),
+                  Text('Proveedor: ${_livenessResult!.providerName}'),
+                  Text('Estado: ${_livenessResult!.accepted ? 'Aprobado' : 'Bloqueado'}'),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
-          Text('Liveness: ${_livenessScore.toStringAsFixed(2)}'),
-          Slider(value: _livenessScore, onChanged: (value) => setState(() => _livenessScore = value)),
           Text('Confianza placa: ${_plateConfidence.toStringAsFixed(2)}'),
           Slider(value: _plateConfidence, onChanged: (value) => setState(() => _plateConfidence = value)),
           Text('Confianza rostro: ${_faceConfidence.toStringAsFixed(2)}'),

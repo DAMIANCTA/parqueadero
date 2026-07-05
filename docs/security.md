@@ -30,6 +30,7 @@
 - Minimizacion de datos en respuestas de APIs.
 - Uso de IDs internos en vez de exponer informacion sensible innecesaria.
 - Politicas de retencion para imagenes y evidencia.
+- Validacion de liveness antes de enviar biometria a flujos de autorizacion.
 
 ## Cifrado
 
@@ -69,11 +70,28 @@
 - `biometric_access_logs`: bitacora de verificaciones biometricas y decisiones de acceso.
 - Las imagenes no se guardan dentro de PostgreSQL; solo se almacena su referencia segura y metadatos de integridad.
 
+## Liveness y proteccion anti-spoofing
+
+- La app movil ejecuta un reto dinamico antes de enviar la solicitud de acceso.
+- Los retos iniciales son: mirar a la izquierda, mirar a la derecha y parpadear.
+- El resultado genera `liveness_score`; si el score es bajo, la validacion se bloquea en dispositivo y no se envia la operacion al backend.
+- Este control reduce el riesgo de fraude con fotos impresas, videos pregrabados o pantallas mostrando el rostro del titular.
+- En esta fase el calculo es mock, pero la interfaz ya esta preparada para motores reales como TensorFlow Lite, MediaPipe o ML Kit.
+
+## Manejo de datos de liveness en dispositivo
+
+- La fase actual trabaja con captura simulada de varios frames para no introducir todavia un modelo de IA definitivo.
+- El flujo conserva solo el `face_image_id`, `liveness_score` y metadatos minimos necesarios para la solicitud.
+- No se plantea guardar video crudo de liveness en almacenamiento persistente del dispositivo.
+- Cuando se integre el modelo real, la recomendacion es procesar en memoria o en almacenamiento temporal cifrado y eliminar frames locales al terminar cada intento.
+- Los resultados de liveness deben entrar tambien al circuito de auditoria para dejar evidencia de aprobacion o rechazo.
+
 ## Seguridad de dispositivos
 
 - Cada dispositivo movil debe identificarse y autenticarse.
 - Los dispositivos IoT deben publicar y consumir solo en topicos autorizados.
 - Los comandos de apertura deben ser auditables y firmados en fases posteriores.
+- Los modulos de liveness y captura facial deben usar solo camara frontal y pedir reintento cuando la calidad o el score sean insuficientes.
 
 ## Estado en Fase 1
 
