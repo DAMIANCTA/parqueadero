@@ -4,6 +4,8 @@ Repositorio inicial del sistema Smart Parking University: una plataforma mobile-
 
 En esta Fase 1 dejamos la base del proyecto lista para evolucionar por etapas: estructura del repositorio, servicios backend mock con FastAPI, documentacion funcional, archivos de entorno y `docker-compose` con la infraestructura principal. Todavia no hay reconocimiento facial real ni lectura real de placas; esos componentes quedan preparados como mocks.
 
+La Fase 4 reorganiza el backend en microservicios dedicados con estructura limpia por servicio y endpoints mock uniformes.
+
 ## Objetivo del sistema
 
 El sistema debe permitir que un vehiculo entre por una puerta y salga por otra, validando placa, rostro, permisos, sesion de parqueo, pago y reglas operativas antes de abrir la barrera.
@@ -19,16 +21,16 @@ El producto esta pensado para dos flujos:
 parqueadero/
 |-- backend/
 |   |-- services/
-|   |   |-- api_gateway/
-|   |   |-- auth_service/
-|   |   |-- identity_service/
-|   |   |-- parking_session_service/
-|   |   |-- payment_service/
-|   |   |-- facial_recognition_service/
-|   |   |-- plate_recognition_service/
-|   |   |-- liveness_service/
-|   |   |-- media_service/
-|   |   |-- iot_service/
+|   |   |-- api-gateway/
+|   |   |-- auth-service/
+|   |   |-- university-service/
+|   |   |-- vehicle-service/
+|   |   |-- parking-service/
+|   |   |-- face-service/
+|   |   |-- plate-service/
+|   |   |-- payment-service/
+|   |   |-- iot-service/
+|   |   |-- audit-service/
 |   |   `-- shared/
 |   `-- README.md
 |-- mobile/
@@ -108,10 +110,12 @@ docker compose up --build
 
 ## Estado de los mocks
 
-- `facial_recognition_service`: devuelve verificacion simulada.
-- `plate_recognition_service`: devuelve placa simulada.
-- `liveness_service`: devuelve validacion simulada.
-- `iot_service`: simula la publicacion de comando de apertura.
+- `face-service`: devuelve una verificacion facial simulada.
+- `plate-service`: devuelve una deteccion de placa simulada.
+- `parking-service`: devuelve una sesion simulada.
+- `payment-service`: devuelve un estado de pago simulado.
+- `iot-service`: simula la publicacion de comando de apertura.
+- `api-gateway`: expone un catalogo mock de servicios disponibles.
 
 ## Siguiente paso recomendado
 

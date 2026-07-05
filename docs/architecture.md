@@ -17,14 +17,14 @@ Smart Parking University es una plataforma mobile-first para controlar accesos a
 
 - `api_gateway`: entrada unica para clientes.
 - `auth_service`: autenticacion y autorizacion.
-- `identity_service`: personas, placas, roles y permisos.
-- `parking_session_service`: sesiones de ingreso y salida.
+- `university_service`: universidades, campus, puertas y dispositivos.
+- `vehicle_service`: placas, vehiculos y autorizaciones.
+- `parking_service`: sesiones de ingreso y salida.
 - `payment_service`: estado de pago para visitantes.
-- `media_service`: referencia a imagenes en almacenamiento.
+- `face_service`: mock preparado para reconocimiento facial.
+- `plate_service`: mock preparado para lectura de placas.
 - `iot_service`: publicacion de eventos de barrera.
-- `facial_recognition_service`: mock preparado para reconocimiento facial.
-- `plate_recognition_service`: mock preparado para lectura de placas.
-- `liveness_service`: mock preparado para deteccion de vida.
+- `audit_service`: registro y consulta de auditoria.
 
 ### 3. Datos y almacenamiento
 

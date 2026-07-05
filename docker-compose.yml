@@ -72,49 +72,77 @@ services:
       - mosquitto
 
   api-gateway:
-    build: ./backend/services/api_gateway
+    build: ./backend/services/api-gateway
     container_name: parking-api-gateway
     env_file: .env
     ports:
       - "${API_GATEWAY_PORT}:8000"
     depends_on:
       - auth-service
-      - identity-service
-      - parking-session-service
+      - university-service
+      - vehicle-service
+      - parking-service
       - payment-service
       - face-service
       - plate-service
-      - liveness-service
       - iot-service
-      - media-service
+      - audit-service
 
   auth-service:
-    build: ./backend/services/auth_service
+    build: ./backend/services/auth-service
     container_name: parking-auth-service
     env_file: .env
     ports:
       - "${AUTH_SERVICE_PORT}:8000"
 
-  identity-service:
-    build: ./backend/services/identity_service
-    container_name: parking-identity-service
+  university-service:
+    build: ./backend/services/university-service
+    container_name: parking-university-service
     env_file: .env
     ports:
-      - "${IDENTITY_SERVICE_PORT}:8000"
+      - "${UNIVERSITY_SERVICE_PORT}:8000"
     depends_on:
       - postgres-core
 
-  parking-session-service:
-    build: ./backend/services/parking_session_service
-    container_name: parking-session-service
+  vehicle-service:
+    build: ./backend/services/vehicle-service
+    container_name: parking-vehicle-service
     env_file: .env
     ports:
-      - "${PARKING_SESSION_SERVICE_PORT}:8000"
+      - "${VEHICLE_SERVICE_PORT}:8000"
     depends_on:
       - postgres-core
+
+  parking-service:
+    build: ./backend/services/parking-service
+    container_name: parking-service
+    env_file: .env
+    ports:
+      - "${PARKING_SERVICE_PORT}:8000"
+    depends_on:
+      - postgres-core
+
+  face-service:
+    build: ./backend/services/face-service
+    container_name: parking-face-service
+    env_file: .env
+    ports:
+      - "${FACE_SERVICE_PORT}:8000"
+    depends_on:
+      - postgres-biometrics
+      - minio
+
+  plate-service:
+    build: ./backend/services/plate-service
+    container_name: parking-plate-service
+    env_file: .env
+    ports:
+      - "${PLATE_SERVICE_PORT}:8000"
+    depends_on:
+      - minio
 
   payment-service:
-    build: ./backend/services/payment_service
+    build: ./backend/services/payment-service
     container_name: parking-payment-service
     env_file: .env
     ports:
@@ -122,34 +150,8 @@ services:
     depends_on:
       - postgres-core
 
-  face-service:
-    build: ./backend/services/facial_recognition_service
-    container_name: parking-face-service
-    env_file: .env
-    ports:
-      - "${FACIAL_RECOGNITION_SERVICE_PORT}:8000"
-    depends_on:
-      - postgres-biometrics
-      - minio
-
-  plate-service:
-    build: ./backend/services/plate_recognition_service
-    container_name: parking-plate-service
-    env_file: .env
-    ports:
-      - "${PLATE_RECOGNITION_SERVICE_PORT}:8000"
-    depends_on:
-      - minio
-
-  liveness-service:
-    build: ./backend/services/liveness_service
-    container_name: parking-liveness-service
-    env_file: .env
-    ports:
-      - "${LIVENESS_SERVICE_PORT}:8000"
-
   iot-service:
-    build: ./backend/services/iot_service
+    build: ./backend/services/iot-service
     container_name: parking-iot-service
     env_file: .env
     ports:
@@ -157,14 +159,14 @@ services:
     depends_on:
       - mosquitto
 
-  media-service:
-    build: ./backend/services/media_service
-    container_name: parking-media-service
+  audit-service:
+    build: ./backend/services/audit-service
+    container_name: parking-audit-service
     env_file: .env
     ports:
-      - "${MEDIA_SERVICE_PORT}:8000"
+      - "${AUDIT_SERVICE_PORT}:8000"
     depends_on:
-      - minio
+      - postgres-core
 
 volumes:
   postgres_core_data:
