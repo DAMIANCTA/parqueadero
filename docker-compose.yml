@@ -30,6 +30,7 @@ services:
     volumes:
       - postgres_biometrics_data:/var/lib/postgresql/data
       - ./database/postgres-biometrics:/workspace/postgres-biometrics
+      - ./database/postgres-biometrics/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_BIOMETRICS_USER} -d ${POSTGRES_BIOMETRICS_DB}"]
       interval: 10s

@@ -359,4 +359,79 @@ El seed inicial crea:
 
 ## Base biometrica
 
-La base biometrica sigue separada por diseño y se implementara en una fase posterior. El modelo actual del core ya deja listas las referencias necesarias para enlazar sesiones, personas y eventos con futuros servicios biometricos.
+La base biometrica ya queda implementada de forma separada en:
+
+- [database/postgres-biometrics/migrations/001_enable_extensions.sql](C:\Users\damia\OneDrive\Documentos\parqueadero\database\postgres-biometrics\migrations\001_enable_extensions.sql)
+- [database/postgres-biometrics/migrations/002_create_biometric_schema.sql](C:\Users\damia\OneDrive\Documentos\parqueadero\database\postgres-biometrics\migrations\002_create_biometric_schema.sql)
+- [database/postgres-biometrics/migrations/003_create_indexes_and_triggers.sql](C:\Users\damia\OneDrive\Documentos\parqueadero\database\postgres-biometrics\migrations\003_create_indexes_and_triggers.sql)
+
+### Principios aplicados
+
+- No se guardan fotos binarias en la base.
+- Las imagenes se referencian por bucket y ruta de MinIO.
+- Cada evidencia tiene hash `SHA-256` para integridad.
+- `pgvector` queda habilitado para `embedding_vector`.
+- `person_id` y `university_id` se almacenan como referencias logicas al dominio principal.
+
+### `image_evidence`
+
+Evidencia visual asociada a enrolamiento, acceso o revision.
+
+Campos clave:
+
+- `id`
+- `university_id`
+- `person_id`
+- `minio_bucket`
+- `object_path`
+- `object_version`
+- `sha256_hash`
+- `image_type`
+- `content_type`
+- `captured_at`
+- `expires_at`
+- `encrypted`
+- `status`
+
+### `face_templates`
+
+Plantillas faciales y embeddings preparados para comparacion biometrica.
+
+Campos clave:
+
+- `id`
+- `university_id`
+- `person_id`
+- `source_image_evidence_id`
+- `embedding_vector`
+- `model_name`
+- `quality_score`
+- `encrypted`
+- `expires_at`
+- `status`
+
+### `biometric_access_logs`
+
+Bitacora de verificaciones biometricas y decisiones tomadas por el motor de validacion.
+
+Campos clave:
+
+- `id`
+- `university_id`
+- `person_id`
+- `face_template_id`
+- `image_evidence_id`
+- `session_reference_id`
+- `gate_reference_id`
+- `device_reference_id`
+- `operation_type`
+- `model_name`
+- `similarity_score`
+- `quality_score`
+- `liveness_score`
+- `decision`
+- `encrypted`
+- `expires_at`
+- `metadata`
+- `occurred_at`
+- `status`

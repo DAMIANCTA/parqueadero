@@ -53,6 +53,22 @@
 - Almacenamiento de imagenes en MinIO con acceso controlado.
 - Acceso a biometria solo desde servicios autorizados.
 
+## Por que la biometria esta separada
+
+- Reduce el impacto de una filtracion: un incidente en la base operativa no expone automaticamente plantillas faciales.
+- Permite controles de acceso mas estrictos: menos servicios y menos personas necesitan llegar a la base biometrica.
+- Facilita politicas de retencion distintas: la biometria y la evidencia visual suelen tener reglas legales y operativas diferentes a las tablas transaccionales.
+- Mejora el cumplimiento y la auditoria: es mas facil demostrar que los datos sensibles viven en un perimetro separado.
+- Evita acoplar imagenes y embeddings con operaciones comunes: la mayoria de consultas de negocio no necesitan tocar datos biometricos.
+- Permite cifrado, respaldo y rotacion de credenciales dedicados para la capa mas sensible.
+
+## Implementacion actual de la base biometrica
+
+- `face_templates`: plantillas faciales con `embedding_vector`, `model_name`, `quality_score`, `encrypted`, `expires_at` y `status`.
+- `image_evidence`: referencias a MinIO, hash `SHA-256`, tipo de imagen, expiracion y estado.
+- `biometric_access_logs`: bitacora de verificaciones biometricas y decisiones de acceso.
+- Las imagenes no se guardan dentro de PostgreSQL; solo se almacena su referencia segura y metadatos de integridad.
+
 ## Seguridad de dispositivos
 
 - Cada dispositivo movil debe identificarse y autenticarse.
