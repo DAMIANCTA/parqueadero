@@ -113,7 +113,7 @@ docker compose up --build
 - `face-service`: devuelve una verificacion facial simulada.
 - `plate-service`: devuelve una deteccion de placa simulada.
 - `parking-service`: devuelve una sesion simulada.
-- `payment-service`: devuelve un estado de pago simulado.
+- `payment-service`: permite buscar sesiones, calcular tarifa y registrar pagos simulados.
 - `iot-service`: simula la publicacion de comando de apertura.
 - `api-gateway`: expone un catalogo mock de servicios disponibles.
 

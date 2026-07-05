@@ -26,6 +26,14 @@ Definir la operacion esperada desde la app movil usada en puertas de acceso para
 6. Si todo coincide, el backend autoriza salida.
 7. `iot_service` publica la orden de apertura.
 
+## Flujo de caja para visitantes
+
+1. La secretaria busca la sesion por placa o por QR.
+2. `payment_service` calcula el monto usando hora de entrada y tarifa vigente.
+3. La secretaria registra el pago con metodo de pago y usuario cajero.
+4. El sistema cambia `payment_status` a `PAID`.
+5. Se registra auditoria para trazabilidad del cobro.
+
 ## Flujo de entrada y salida para estudiantes, docentes y trabajadores
 
 1. La app captura placa y rostro.

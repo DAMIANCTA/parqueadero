@@ -18,7 +18,7 @@ Responsabilidad: sesiones de parqueo, eventos de entrada/salida, reglas de perma
 
 ## payment_service
 
-Responsabilidad: consulta de estado de pago, reglas tarifarias futuras y conciliacion de pagos de visitantes.
+Responsabilidad: consulta de sesiones por placa o QR, calculo tarifario, registro de pagos y conciliacion basica para visitantes.
 
 ## facial_recognition_service
 

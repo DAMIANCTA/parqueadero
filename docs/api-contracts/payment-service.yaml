@@ -3,9 +3,55 @@ info:
   title: Payment Service
   version: 0.1.0
 paths:
-  /api/v1/payments/sessions/{session_id}/status:
+  /payments/session/{plate}:
     get:
-      summary: Get payment status for visitor session
+      summary: Find visitor session by vehicle plate
+      parameters:
+        - in: path
+          name: plate
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session returned
+  /payments/session-by-qr/{qr_code}:
+    get:
+      summary: Find visitor session by QR code
+      parameters:
+        - in: path
+          name: qr_code
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session returned
+  /payments/pay:
+    post:
+      summary: Register a payment for a visitor session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_id, cashier_user_id, payment_method, amount]
+              properties:
+                session_id:
+                  type: string
+                cashier_user_id:
+                  type: string
+                payment_method:
+                  type: string
+                amount:
+                  type: number
+      responses:
+        "200":
+          description: Payment processed
+  /payments/status/{session_id}:
+    get:
+      summary: Get payment status for session id
       parameters:
         - in: path
           name: session_id
