@@ -1,0 +1,233 @@
+from config import settings
+from repositories.access_event_repository import AccessEventRepository
+from repositories.audit_log_repository import AuditLogRepository
+from repositories.incident_repository import IncidentRepository
+from repositories.iot_repository import IoTRepository
+from repositories.parking_session_repository import ParkingSessionRepository
+from repositories.plate_repository import PlateRepository
+from repositories.vehicle_authorization_repository import VehicleAuthorizationRepository
+from schemas.parking import GateCommand, ParkingExitRequest, ParkingExitResponse, SessionData
+from services.face_validation_service import FaceValidationService
+
+
+class ExitService:
+    def __init__(self) -> None:
+        self.plate_repository = PlateRepository()
+        self.face_service = FaceValidationService()
+        self.vehicle_authorization_repository = VehicleAuthorizationRepository()
+        self.parking_session_repository = ParkingSessionRepository()
+        self.access_event_repository = AccessEventRepository()
+        self.audit_log_repository = AuditLogRepository()
+        self.incident_repository = IncidentRepository()
+        self.iot_repository = IoTRepository()
+
+    def process_exit(self, payload: ParkingExitRequest) -> ParkingExitResponse:
+        try:
+            normalized_plate = self.plate_repository.normalize_and_validate(
+                plate_text=payload.plate_text,
+                confidence_plate=payload.confidence_plate,
+                min_confidence=settings.min_plate_confidence,
+            )
+        except ValueError as exc:
+            return self._reject(
+                payload=payload,
+                normalized_plate=payload.plate_text.strip().upper().replace(" ", ""),
+                reason=str(exc),
+                create_incident=True,
+            )
+
+        if payload.liveness_score < settings.min_liveness_score:
+            return self._reject(
+                payload=payload,
+                normalized_plate=normalized_plate,
+                reason="Liveness score too low",
+                create_incident=True,
+            )
+
+        visitor_session = self.parking_session_repository.find_active_session_by_plate(
+            university_id=payload.university_id,
+            plate_text=normalized_plate,
+        )
+        if visitor_session is not None and visitor_session["person_type"] == "visitor":
+            return self._process_visitor_exit(payload, normalized_plate, visitor_session)
+
+        return self._process_registered_exit(payload, normalized_plate)
+
+    def _process_visitor_exit(
+        self,
+        payload: ParkingExitRequest,
+        normalized_plate: str,
+        visitor_session: dict,
+    ) -> ParkingExitResponse:
+        face_match = self.face_service.compare_entry_and_exit_faces(
+            entry_face_image_id=visitor_session["entry_face_image_id"],
+            exit_face_image_id=payload.face_image_id,
+            confidence_face=payload.confidence_face,
+            min_confidence=settings.min_face_confidence,
+        )
+        if not face_match["accepted"]:
+            return self._reject(
+                payload=payload,
+                normalized_plate=normalized_plate,
+                reason="Face does not match entry record",
+                session_id=visitor_session["session_id"],
+                create_incident=True,
+            )
+
+        if visitor_session["payment_status"] != "PAID":
+            return self._reject(
+                payload=payload,
+                normalized_plate=normalized_plate,
+                reason="Payment status is not PAID",
+                session_id=visitor_session["session_id"],
+                create_incident=True,
+            )
+
+        session_record = self.parking_session_repository.close_session(
+            session_id=visitor_session["session_id"],
+            plate_text=normalized_plate,
+            person_type="visitor",
+            payment_status="PAID",
+        )
+        return self._authorize_exit(
+            payload=payload,
+            normalized_plate=normalized_plate,
+            session_record=session_record,
+            action="parking.exit.authorized.visitor",
+            event_reason="exit_granted",
+        )
+
+    def _process_registered_exit(self, payload: ParkingExitRequest, normalized_plate: str) -> ParkingExitResponse:
+        authorization = self.vehicle_authorization_repository.validate_registered_exit(
+            university_id=payload.university_id,
+            plate_text=normalized_plate,
+            face_image_id=payload.face_image_id,
+        )
+        if not authorization["plate_exists"]:
+            return self._reject(
+                payload=payload,
+                normalized_plate=normalized_plate,
+                reason="Plate does not exist",
+            )
+        if not authorization["face_authorized"]:
+            return self._reject(
+                payload=payload,
+                normalized_plate=normalized_plate,
+                reason="Face does not belong to an authorized person for this plate",
+            )
+        if not authorization["permission_valid"]:
+            return self._reject(
+                payload=payload,
+                normalized_plate=normalized_plate,
+                reason="Permission is not valid",
+            )
+
+        face_match = self.face_service.validate_registered_face(
+            face_image_id=payload.face_image_id,
+            confidence_face=payload.confidence_face,
+            min_confidence=settings.min_face_confidence,
+        )
+        if not face_match["accepted"]:
+            return self._reject(
+                payload=payload,
+                normalized_plate=normalized_plate,
+                reason="Face confidence too low",
+            )
+
+        session_record = self.parking_session_repository.create_registered_exit_record(
+            plate_text=normalized_plate,
+            person_type=authorization["person_type"],
+        )
+        return self._authorize_exit(
+            payload=payload,
+            normalized_plate=normalized_plate,
+            session_record=session_record,
+            action="parking.exit.authorized.registered",
+            event_reason="exit_granted",
+        )
+
+    def _authorize_exit(
+        self,
+        payload: ParkingExitRequest,
+        normalized_plate: str,
+        session_record: dict,
+        action: str,
+        event_reason: str,
+    ) -> ParkingExitResponse:
+        gate_command = self.iot_repository.open_gate(gate_id=payload.gate_id, plate_text=normalized_plate)
+        access_event = self.access_event_repository.create_exit_event(
+            university_id=payload.university_id,
+            gate_id=payload.gate_id,
+            plate_text=normalized_plate,
+            session_id=session_record["session_id"],
+            result="success",
+            reason=event_reason,
+        )
+        audit_log = self.audit_log_repository.create_exit_audit_log(
+            university_id=payload.university_id,
+            action=action,
+            resource_id=session_record["session_id"],
+            metadata={
+                "gate_id": payload.gate_id,
+                "plate_text": normalized_plate,
+                "campus_id": payload.campus_id,
+            },
+        )
+        return ParkingExitResponse(
+            authorized=True,
+            status="AUTHORIZED",
+            message="Vehicle exit authorized",
+            session=SessionData(**session_record),
+            gate_command=GateCommand(**gate_command),
+            access_event_id=access_event["id"],
+            audit_log_id=audit_log["id"],
+            incident_id=None,
+        )
+
+    def _reject(
+        self,
+        payload: ParkingExitRequest,
+        normalized_plate: str,
+        reason: str,
+        session_id: str | None = None,
+        create_incident: bool = False,
+    ) -> ParkingExitResponse:
+        access_event = self.access_event_repository.create_exit_event(
+            university_id=payload.university_id,
+            gate_id=payload.gate_id,
+            plate_text=normalized_plate,
+            session_id=session_id,
+            result="denied",
+            reason=reason,
+        )
+        audit_log = self.audit_log_repository.create_exit_audit_log(
+            university_id=payload.university_id,
+            action="parking.exit.rejected",
+            resource_id=session_id,
+            metadata={
+                "gate_id": payload.gate_id,
+                "plate_text": normalized_plate,
+                "campus_id": payload.campus_id,
+                "reason": reason,
+            },
+        )
+        incident_id = None
+        if create_incident:
+            incident = self.incident_repository.create_incident(
+                university_id=payload.university_id,
+                gate_id=payload.gate_id,
+                session_id=session_id,
+                description=reason,
+            )
+            incident_id = incident["id"]
+
+        return ParkingExitResponse(
+            authorized=False,
+            status="REJECTED",
+            message=reason,
+            session=None,
+            gate_command=None,
+            access_event_id=access_event["id"],
+            audit_log_id=audit_log["id"],
+            incident_id=incident_id,
+        )

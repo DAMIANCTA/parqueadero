@@ -18,6 +18,17 @@ class ParkingEntryRequest(BaseModel):
     confidence_face: float = Field(ge=0, le=1)
 
 
+class ParkingExitRequest(BaseModel):
+    university_id: str
+    campus_id: str
+    gate_id: str
+    plate_text: str = Field(min_length=3, max_length=20)
+    face_image_id: str
+    liveness_score: float = Field(ge=0, le=1)
+    confidence_plate: float = Field(ge=0, le=1)
+    confidence_face: float = Field(ge=0, le=1)
+
+
 class SessionData(BaseModel):
     session_id: str
     session_status: str
@@ -40,3 +51,15 @@ class ParkingEntryResponse(BaseModel):
     gate_command: GateCommand | None = None
     access_event_id: str
     audit_log_id: str
+    incident_id: str | None = None
+
+
+class ParkingExitResponse(BaseModel):
+    authorized: bool
+    status: Literal["AUTHORIZED", "REJECTED"]
+    message: str
+    session: SessionData | None = None
+    gate_command: GateCommand | None = None
+    access_event_id: str
+    audit_log_id: str
+    incident_id: str | None = None
