@@ -111,7 +111,7 @@ docker compose up --build
 ## Estado de los mocks
 
 - `face-service`: devuelve una verificacion facial simulada.
-- `plate-service`: devuelve una deteccion de placa simulada.
+- `plate-service`: expone `POST /plates/detect`, acepta imagen multipart y soporta modo `mock` o `real` preparado para YOLO + OCR.
 - `parking-service`: devuelve una sesion simulada.
 - `payment-service`: permite buscar sesiones, calcular tarifa y registrar pagos simulados.
 - `iot-service`: publica comando MQTT simulado hacia Mosquitto y Node-RED.

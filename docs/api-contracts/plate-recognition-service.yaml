@@ -3,21 +3,49 @@ info:
   title: Plate Recognition Service
   version: 0.1.0
 paths:
-  /api/v1/plates/detect:
+  /plates/detect:
     post:
       summary: Detect vehicle plate from image
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
               type: object
-              required: [image_uri]
+              required: [image]
               properties:
-                image_uri:
+                image:
                   type: string
+                  format: binary
                 country_code:
                   type: string
       responses:
         "200":
           description: Plate detection returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plate_text, confidence, bounding_box, mode, valid_format]
+                properties:
+                  plate_text:
+                    type: string
+                  confidence:
+                    type: number
+                    format: float
+                  mode:
+                    type: string
+                    enum: [mock, real]
+                  valid_format:
+                    type: boolean
+                  bounding_box:
+                    type: object
+                    properties:
+                      x:
+                        type: integer
+                      y:
+                        type: integer
+                      width:
+                        type: integer
+                      height:
+                        type: integer
