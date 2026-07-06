@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     fixed_first_hour_amount: float = 1.50
     additional_hour_amount: float = 0.75
     currency: str = "USD"
+    demo_cashier_user_id: str = "cashier-demo"
     jwt_secret_key: str = ""
     jwt_issuer: str = "smart-parking-university"
     jwt_audience: str = "smart-parking-clients"

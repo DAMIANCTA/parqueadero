@@ -35,6 +35,12 @@ class PaymentRequest(BaseModel):
     amount: float = Field(gt=0)
 
 
+class PaymentByPlateRequest(BaseModel):
+    plate_text: str = Field(min_length=3, max_length=20)
+    cashier_user_id: str = "cashier-demo"
+    payment_method: PaymentMethod = "cash"
+
+
 class PaymentResponse(BaseModel):
     success: bool
     message: str
@@ -49,3 +55,19 @@ class PaymentStatusResponse(BaseModel):
     payment_status: PaymentStatus | None = None
     amount_due: float | None = None
     paid_at: datetime | None = None
+
+
+class PaymentStatusByPlateResponse(BaseModel):
+    found: bool
+    message: str
+    plate_text: str | None = None
+    session_id: str | None = None
+    payment_status: PaymentStatus | None = None
+    amount_due: float | None = None
+    paid_at: datetime | None = None
+
+
+class InternalSessionUpsertRequest(BaseModel):
+    session_id: str
+    plate_text: str = Field(min_length=3, max_length=20)
+    payment_status: PaymentStatus = "PENDING"

@@ -1,8 +1,12 @@
+import 'dart:typed_data';
+
 enum ModeType { entry, exit }
 
 enum PersonType { visitor, student, teacher, employee }
 
 enum LivenessChallenge { lookLeft, lookRight, blink }
+
+enum EvidenceImageType { faceEntry, faceExit, plateEntry, plateExit }
 
 extension PersonTypeValue on PersonType {
   String get value => switch (this) {
@@ -37,6 +41,22 @@ extension LivenessChallengeValue on LivenessChallenge {
         LivenessChallenge.lookLeft => 'Gira ligeramente el rostro hacia la izquierda.',
         LivenessChallenge.lookRight => 'Gira ligeramente el rostro hacia la derecha.',
         LivenessChallenge.blink => 'Mira la camara y parpadea una vez.',
+      };
+}
+
+extension EvidenceImageTypeValue on EvidenceImageType {
+  String get value => switch (this) {
+        EvidenceImageType.faceEntry => 'face_entry',
+        EvidenceImageType.faceExit => 'face_exit',
+        EvidenceImageType.plateEntry => 'plate_entry',
+        EvidenceImageType.plateExit => 'plate_exit',
+      };
+
+  String get label => switch (this) {
+        EvidenceImageType.faceEntry => 'Rostro entrada',
+        EvidenceImageType.faceExit => 'Rostro salida',
+        EvidenceImageType.plateEntry => 'Placa entrada',
+        EvidenceImageType.plateExit => 'Placa salida',
       };
 }
 
@@ -132,6 +152,56 @@ class DemoGateResult {
   final String command;
   final bool published;
   final Map<String, dynamic> payload;
+}
+
+class PaymentByPlateResult {
+  const PaymentByPlateResult({
+    required this.success,
+    required this.message,
+    required this.auditLogId,
+    this.session,
+  });
+
+  final bool success;
+  final String message;
+  final String auditLogId;
+  final Map<String, dynamic>? session;
+}
+
+class LocalEvidenceDraft {
+  const LocalEvidenceDraft({
+    required this.label,
+    required this.fileName,
+    required this.bytes,
+    required this.contentType,
+    required this.isMock,
+  });
+
+  final String label;
+  final String fileName;
+  final Uint8List bytes;
+  final String contentType;
+  final bool isMock;
+}
+
+class EvidenceUploadResult {
+  const EvidenceUploadResult({
+    required this.imageId,
+    required this.bucket,
+    required this.objectName,
+    required this.imageType,
+    required this.plate,
+    required this.createdAt,
+    this.sessionId,
+  });
+
+  final String imageId;
+  final String bucket;
+  final String objectName;
+  final String imageType;
+  final String plate;
+  final DateTime createdAt;
+  final String? sessionId;
 }
 
 class LivenessFrame {

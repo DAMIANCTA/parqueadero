@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_config.dart';
 import '../services/api_client.dart';
 import '../state/parking_app_scope.dart';
 import 'setup_screen.dart';
@@ -16,6 +17,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController(text: 'gate.operator');
   final _passwordController = TextEditingController();
+  final _apiBaseUrlController = TextEditingController(text: AppConfig.apiBaseUrl);
   final _apiClient = ApiClient();
   bool _loading = false;
   String? _error;
@@ -24,6 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _apiBaseUrlController.dispose();
     super.dispose();
   }
 
@@ -34,6 +37,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      AppConfig.setApiBaseUrl(_apiBaseUrlController.text);
       final isHealthy = await _apiClient.checkHealth();
       if (!mounted) return;
       if (!isHealthy) {
@@ -92,6 +96,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _passwordController,
                     obscureText: true,
                     decoration: const InputDecoration(labelText: 'Clave', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _apiBaseUrlController,
+                    keyboardType: TextInputType.url,
+                    decoration: const InputDecoration(
+                      labelText: 'API base URL',
+                      helperText: 'Ejemplo Android instalado: http://192.168.100.11:8000',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   if (_error != null) ...[

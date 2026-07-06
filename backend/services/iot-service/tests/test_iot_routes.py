@@ -38,6 +38,29 @@ class IoTRouteTests(unittest.TestCase):
         )
         publish_single.assert_called_once()
 
+    @patch("repositories.mqtt_repository.publish.single")
+    def test_status_route_publishes_status_topic(self, publish_single) -> None:
+        response = self.client.post(
+            "/api/v1/gates/status",
+            json={
+                "university_id": "uce",
+                "campus_id": "matriz",
+                "gate_id": "norte",
+                "plate": "ABC1234",
+                "barrier": "closed",
+                "device_status": "online",
+                "reason": "payment_pending",
+                "event_type": "exit",
+                "access_status": "rejected",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["published"])
+        self.assertEqual(payload["topic"], "universities/uce/campuses/matriz/gates/norte/status")
+        publish_single.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

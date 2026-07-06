@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
-from schemas.iot import GateOpenRequest, GateOpenResponse
+from schemas.iot import GateOpenRequest, GateOpenResponse, GateStatusRequest, GateStatusResponse
 from security import require_permissions
 from services.mqtt_service import MqttService
 
@@ -16,3 +16,12 @@ def open_gate(command: GateOpenRequest) -> GateOpenResponse:
     except Exception as exc:  # pragma: no cover - defensive error translation
         raise HTTPException(status_code=503, detail=f"MQTT publish failed: {exc}") from exc
     return GateOpenResponse(**payload)
+
+
+@router.post("/status", response_model=GateStatusResponse, dependencies=[require_permissions("iot.gates.open")])
+def report_gate_status(status: GateStatusRequest) -> GateStatusResponse:
+    try:
+        payload = mqtt_service.publish_gate_status(status)
+    except Exception as exc:  # pragma: no cover - defensive error translation
+        raise HTTPException(status_code=503, detail=f"MQTT status publish failed: {exc}") from exc
+    return GateStatusResponse(**payload)

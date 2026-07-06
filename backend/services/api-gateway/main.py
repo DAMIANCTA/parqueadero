@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from routes.integration import router as integration_router
@@ -7,6 +8,15 @@ from security import AuditLogMiddleware, AuthenticationMiddleware, RateLimitMidd
 
 
 app = FastAPI(title=settings.service_name, version=settings.service_version)
+allow_origins = settings.cors_allow_origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_credentials="*" not in allow_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 app.add_middleware(
     AuditLogMiddleware,
     service_name=settings.service_name,
@@ -20,7 +30,7 @@ app.add_middleware(
     secret_key=settings.jwt_secret_key,
     issuer=settings.jwt_issuer,
     audience=settings.jwt_audience,
-    public_paths={"/health", "/version", "/parking/entry", "/parking/exit", "/demo/open-gate"},
+    public_paths={"/health", "/version", "/parking/entry", "/parking/exit", "/demo/open-gate", "/payments/pay-by-plate", "/evidence/upload"},
 )
 app.add_middleware(
     RateLimitMiddleware,

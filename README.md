@@ -111,6 +111,7 @@ docker compose up --build
 - [Diseño de base de datos](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\database-design.md)
 - [Flujo IoT](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\iot-flow.md)
 - [Verificacion e integracion local](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\testing-local.md)
+- [Pruebas sin modo desarrollador](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\testing-without-developer-mode.md)
 - [Documentacion final del proyecto](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\final-project-report.md)
 - [Dashboard administrativo](C:\Users\damia\OneDrive\Documentos\parqueadero\web\admin-dashboard\index.html)
 

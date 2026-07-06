@@ -69,3 +69,40 @@ class PaymentRepository:
         session["payment_method"] = payment_method
         session["paid_at"] = datetime.now(UTC)
         return session.copy()
+
+    def upsert_session(self, session_id: str, plate_text: str, payment_status: str = "PENDING") -> dict:
+        normalized_plate = plate_text.strip().upper()
+        existing = self.find_by_plate(normalized_plate)
+        if existing is not None:
+            session = self.sessions[existing["session_id"]]
+            session["session_id"] = session_id
+            session["plate_text"] = normalized_plate
+            session["payment_status"] = payment_status
+            return session.copy()
+
+        session = {
+            "session_id": session_id,
+            "plate_text": normalized_plate,
+            "qr_code": f"QR-{normalized_plate}",
+            "entry_time": datetime.now(UTC),
+            "exit_time": None,
+            "payment_status": payment_status,
+            "cashier_user_id": None,
+            "amount": None,
+            "payment_method": None,
+            "paid_at": None,
+            "currency": "USD",
+        }
+        self.sessions[session_id] = session
+        return session.copy()
+
+    def mark_as_paid_by_plate(self, plate_text: str, cashier_user_id: str, amount: float, payment_method: str) -> dict | None:
+        session = self.find_by_plate(plate_text)
+        if session is None:
+            return None
+        return self.mark_as_paid(
+            session_id=session["session_id"],
+            cashier_user_id=cashier_user_id,
+            amount=amount,
+            payment_method=payment_method,
+        )

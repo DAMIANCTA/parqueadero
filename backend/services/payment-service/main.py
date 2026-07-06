@@ -20,7 +20,12 @@ app.add_middleware(
     secret_key=settings.jwt_secret_key,
     issuer=settings.jwt_issuer,
     audience=settings.jwt_audience,
-    public_paths={"/health", "/version"},
+    public_paths={
+        "/health",
+        "/version",
+        "/payments/internal/status-by-plate",
+        "/payments/internal/sessions/upsert",
+    },
 )
 app.add_middleware(
     RateLimitMiddleware,

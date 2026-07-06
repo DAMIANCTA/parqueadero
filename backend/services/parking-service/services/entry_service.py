@@ -3,9 +3,11 @@ from repositories.access_event_repository import AccessEventRepository
 from repositories.audit_log_repository import AuditLogRepository
 from repositories.iot_repository import IoTRepository
 from repositories.parking_session_repository import ParkingSessionRepository
+from repositories.payment_repository import PaymentRepository
 from repositories.plate_repository import PlateRepository
 from repositories.vehicle_authorization_repository import VehicleAuthorizationRepository
 from schemas.parking import GateCommand, ParkingEntryRequest, ParkingEntryResponse, SessionData
+from services.evidence_storage_service import EvidenceStorageService
 from services.face_validation_service import FaceValidationService
 
 
@@ -18,6 +20,8 @@ class EntryService:
         self.access_event_repository = AccessEventRepository()
         self.audit_log_repository = AuditLogRepository()
         self.iot_repository = IoTRepository()
+        self.payment_repository = PaymentRepository()
+        self.evidence_service = EvidenceStorageService()
 
     def process_entry(self, payload: ParkingEntryRequest) -> ParkingEntryResponse:
         try:
@@ -71,14 +75,30 @@ class EntryService:
             gate_id=payload.gate_id,
             plate_text=normalized_plate,
             person_type=payload.person_type,
+            entry_face_image_id=payload.face_image_id,
+            entry_face_evidence_id=payload.face_evidence_id,
+            entry_plate_evidence_id=payload.plate_evidence_id,
         )
+        self.parking_session_repository.attach_evidence(
+            session_record["session_id"],
+            operation="entry",
+            face_evidence_id=payload.face_evidence_id,
+            plate_evidence_id=payload.plate_evidence_id,
+        )
+        self.evidence_service.link_evidence_to_session(payload.face_evidence_id, session_record["session_id"], normalized_plate)
+        self.evidence_service.link_evidence_to_session(payload.plate_evidence_id, session_record["session_id"], normalized_plate)
+        if payload.person_type == "visitor":
+            self.payment_repository.sync_visitor_session(
+                session_id=session_record["session_id"],
+                plate_text=normalized_plate,
+            )
         gate_command = self.iot_repository.open_gate(
             university_id=payload.university_id,
             campus_id=payload.campus_id,
             gate_id=payload.gate_id,
             plate_text=normalized_plate,
             session_id=session_record["session_id"],
-            reason="validated",
+            reason="entry_granted",
         )
         access_event = self.access_event_repository.create_entry_event(
             university_id=payload.university_id,

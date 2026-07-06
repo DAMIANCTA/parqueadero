@@ -44,12 +44,80 @@ class ApiClient {
     );
   }
 
+  Future<PaymentByPlateResult> payByPlate(String plateText) async {
+    final response = await _client.post(
+      Uri.parse('${AppConfig.apiBaseUrl}/payments/pay-by-plate'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'plate_text': plateText,
+        'cashier_user_id': 'cashier-demo',
+        'payment_method': 'cash',
+      }),
+    );
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode >= 400) {
+      throw Exception(body['detail'] ?? 'No se pudo registrar el pago.');
+    }
+
+    return PaymentByPlateResult(
+      success: body['success'] as bool? ?? false,
+      message: body['message'] as String? ?? 'Sin mensaje',
+      auditLogId: body['audit_log_id'] as String? ?? 'n/a',
+      session: body['session'] is Map<String, dynamic> ? Map<String, dynamic>.from(body['session'] as Map<String, dynamic>) : null,
+    );
+  }
+
+  Future<EvidenceUploadResult> uploadEvidence({
+    required EvidenceImageType imageType,
+    required String plate,
+    String? sessionId,
+    required LocalEvidenceDraft evidence,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${AppConfig.apiBaseUrl}/evidence/upload'),
+    )
+      ..fields['image_type'] = imageType.value
+      ..fields['plate'] = plate
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          evidence.bytes,
+          filename: evidence.fileName,
+        ),
+      );
+
+    if (sessionId != null && sessionId.isNotEmpty) {
+      request.fields['session_id'] = sessionId;
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode >= 400) {
+      throw Exception(body['detail'] ?? 'No se pudo cargar la evidencia.');
+    }
+
+    return EvidenceUploadResult(
+      imageId: body['image_id'] as String? ?? 'n/a',
+      bucket: body['bucket'] as String? ?? '-',
+      objectName: body['object_name'] as String? ?? '-',
+      imageType: body['image_type'] as String? ?? imageType.value,
+      plate: body['plate'] as String? ?? plate,
+      createdAt: DateTime.tryParse(body['created_at'] as String? ?? '') ?? DateTime.now(),
+      sessionId: body['session_id'] as String?,
+    );
+  }
+
   Future<AuthorizationResult> submitEntry({
     required String universityId,
     required String campusId,
     required String gateId,
     required String plateText,
     required String faceImageId,
+    String? faceEvidenceId,
+    String? plateEvidenceId,
     required double livenessScore,
     required PersonType personType,
     required double confidencePlate,
@@ -64,6 +132,8 @@ class ApiClient {
         'gate_id': gateId,
         'plate_text': plateText,
         'face_image_id': faceImageId,
+        'face_evidence_id': faceEvidenceId,
+        'plate_evidence_id': plateEvidenceId,
         'liveness_score': livenessScore,
         'person_type': personType.value,
         'confidence_plate': confidencePlate,
@@ -79,6 +149,8 @@ class ApiClient {
     required String gateId,
     required String plateText,
     required String faceImageId,
+    String? faceEvidenceId,
+    String? plateEvidenceId,
     required double livenessScore,
     required double confidencePlate,
     required double confidenceFace,
@@ -92,6 +164,8 @@ class ApiClient {
         'gate_id': gateId,
         'plate_text': plateText,
         'face_image_id': faceImageId,
+        'face_evidence_id': faceEvidenceId,
+        'plate_evidence_id': plateEvidenceId,
         'liveness_score': livenessScore,
         'confidence_plate': confidencePlate,
         'confidence_face': confidenceFace,

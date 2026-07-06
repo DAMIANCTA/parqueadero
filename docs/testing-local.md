@@ -219,3 +219,35 @@ La integracion local se considera satisfactoria cuando:
 - Node-RED abre en `1880` y muestra eventos MQTT.
 - La app Flutter en Windows o Android llama al gateway en `8000`.
 - El boton `Abrir barrera demo` genera publicacion MQTT y respuesta positiva en la app.
+
+## 13. Flujo mock completo de entrada y salida
+
+Una vez levantado el entorno, se puede demostrar el flujo completo sin IA real:
+
+1. En Flutter, iniciar sesion y seleccionar universidad, campus y puerta.
+2. Entrar a `Modo entrada`.
+3. Usar una placa visitante, por ejemplo `VIS1001`.
+4. Dejar activos:
+   - `Simulador de rostro valido`
+   - `Simulador de liveness valido`
+5. Presionar `Registrar entrada`.
+6. Confirmar en el resultado:
+   - entrada autorizada
+   - sesion `INSIDE`
+   - pago `PENDING`
+7. Abrir [http://localhost:1880/parking-dashboard](http://localhost:1880/parking-dashboard) y verificar:
+   - placa
+   - `Tipo de evento: entry`
+   - `Estado de acceso: authorized`
+   - barrera en apertura o abierta
+8. Ir a `Modo salida` e ingresar la misma placa `VIS1001`.
+9. Presionar `Validar salida` sin pagar primero.
+10. Confirmar rechazo por pago pendiente.
+11. Verificar en Node-RED:
+   - `Tipo de evento: exit`
+   - `Estado de acceso: rejected`
+   - `Motivo: payment_pending`
+   - barrera `closed`
+12. En la misma pantalla de salida, presionar `Marcar pago demo`.
+13. Repetir `Validar salida`.
+14. Confirmar salida autorizada y barrera abierta.

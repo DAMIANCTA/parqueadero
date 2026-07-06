@@ -53,6 +53,23 @@ class PaymentFlowTests(unittest.TestCase):
         self.assertTrue(payload["found"])
         self.assertEqual(payload["payment_status"], "PAID")
 
+    def test_pay_by_plate_marks_pending_session_as_paid(self) -> None:
+        response = self.client.post(
+            "/payments/pay-by-plate",
+            json={
+                "plate_text": "VISPEND",
+                "cashier_user_id": "cashier-demo",
+                "payment_method": "cash",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["session"]["plate_text"], "VISPEND")
+        self.assertEqual(payload["session"]["payment_status"], "PAID")
+        self.assertEqual(payload["session"]["cashier_user_id"], "cashier-demo")
+
 
 if __name__ == "__main__":
     unittest.main()

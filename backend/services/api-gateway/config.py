@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     service_name: str = "api-gateway"
     service_version: str = "0.1.0"
     environment: str = "local"
+    cors_allow_origins_csv: str = "*"
     parking_service_url: str = "http://parking-service:8000"
     face_service_url: str = "http://face-service:8000"
     plate_service_url: str = "http://plate-service:8000"
@@ -34,6 +35,11 @@ class Settings(BaseSettings):
     audit_internal_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def cors_allow_origins(self) -> list[str]:
+        values = [value.strip() for value in self.cors_allow_origins_csv.split(",") if value.strip()]
+        return values or ["*"]
 
 
 settings = Settings()

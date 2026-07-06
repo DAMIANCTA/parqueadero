@@ -12,6 +12,8 @@ class ParkingEntryRequest(BaseModel):
     gate_id: str
     plate_text: str = Field(min_length=3, max_length=20)
     face_image_id: str
+    face_evidence_id: str | None = None
+    plate_evidence_id: str | None = None
     liveness_score: float = Field(ge=0, le=1)
     person_type: PersonType
     confidence_plate: float = Field(ge=0, le=1)
@@ -24,6 +26,8 @@ class ParkingExitRequest(BaseModel):
     gate_id: str
     plate_text: str = Field(min_length=3, max_length=20)
     face_image_id: str
+    face_evidence_id: str | None = None
+    plate_evidence_id: str | None = None
     liveness_score: float = Field(ge=0, le=1)
     confidence_plate: float = Field(ge=0, le=1)
     confidence_face: float = Field(ge=0, le=1)
@@ -73,3 +77,26 @@ class DemoOpenGateResponse(BaseModel):
     command: str
     published: bool
     payload: dict
+
+
+class PaymentByPlateRequest(BaseModel):
+    plate_text: str = Field(min_length=3, max_length=20)
+    cashier_user_id: str = "cashier-demo"
+    payment_method: str = "cash"
+
+
+class PaymentByPlateResponse(BaseModel):
+    success: bool
+    message: str
+    session: dict | None = None
+    audit_log_id: str
+
+
+class EvidenceUploadResponse(BaseModel):
+    image_id: str
+    bucket: str
+    object_name: str
+    image_type: str
+    session_id: str | None = None
+    plate: str
+    created_at: str

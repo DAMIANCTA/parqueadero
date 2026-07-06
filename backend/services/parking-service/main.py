@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from config import settings
+from routes.evidence import router as evidence_router
 from routes.parking import router as parking_router
 from routes.system import router as system_router
 from security import AuditLogMiddleware, AuthenticationMiddleware, RateLimitMiddleware
@@ -30,3 +31,4 @@ app.add_middleware(
 )
 app.include_router(system_router)
 app.include_router(parking_router)
+app.include_router(evidence_router)

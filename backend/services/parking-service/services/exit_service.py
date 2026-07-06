@@ -4,9 +4,11 @@ from repositories.audit_log_repository import AuditLogRepository
 from repositories.incident_repository import IncidentRepository
 from repositories.iot_repository import IoTRepository
 from repositories.parking_session_repository import ParkingSessionRepository
+from repositories.payment_repository import PaymentRepository
 from repositories.plate_repository import PlateRepository
 from repositories.vehicle_authorization_repository import VehicleAuthorizationRepository
 from schemas.parking import GateCommand, ParkingExitRequest, ParkingExitResponse, SessionData
+from services.evidence_storage_service import EvidenceStorageService
 from services.face_validation_service import FaceValidationService
 
 
@@ -20,6 +22,8 @@ class ExitService:
         self.audit_log_repository = AuditLogRepository()
         self.incident_repository = IncidentRepository()
         self.iot_repository = IoTRepository()
+        self.payment_repository = PaymentRepository()
+        self.evidence_service = EvidenceStorageService()
 
     def process_exit(self, payload: ParkingExitRequest) -> ParkingExitResponse:
         try:
@@ -74,21 +78,30 @@ class ExitService:
                 create_incident=True,
             )
 
-        if visitor_session["payment_status"] != "PAID":
+        payment_status = self.payment_repository.get_status_by_plate(normalized_plate)
+        effective_payment_status = payment_status["payment_status"] if payment_status and payment_status.get("found") else visitor_session["payment_status"]
+        if effective_payment_status != "PAID":
             return self._reject(
                 payload=payload,
                 normalized_plate=normalized_plate,
                 reason="Payment status is not PAID",
                 session_id=visitor_session["session_id"],
                 create_incident=True,
+                publish_status=True,
+                event_type="exit",
+                status_reason="payment_pending",
             )
 
         session_record = self.parking_session_repository.close_session(
             session_id=visitor_session["session_id"],
             plate_text=normalized_plate,
             person_type="visitor",
-            payment_status="PAID",
+            payment_status=effective_payment_status,
+            exit_face_evidence_id=payload.face_evidence_id,
+            exit_plate_evidence_id=payload.plate_evidence_id,
         )
+        self.evidence_service.link_evidence_to_session(payload.face_evidence_id, session_record["session_id"], normalized_plate)
+        self.evidence_service.link_evidence_to_session(payload.plate_evidence_id, session_record["session_id"], normalized_plate)
         return self._authorize_exit(
             payload=payload,
             normalized_plate=normalized_plate,
@@ -137,7 +150,11 @@ class ExitService:
         session_record = self.parking_session_repository.create_registered_exit_record(
             plate_text=normalized_plate,
             person_type=authorization["person_type"],
+            exit_face_evidence_id=payload.face_evidence_id,
+            exit_plate_evidence_id=payload.plate_evidence_id,
         )
+        self.evidence_service.link_evidence_to_session(payload.face_evidence_id, session_record["session_id"], normalized_plate)
+        self.evidence_service.link_evidence_to_session(payload.plate_evidence_id, session_record["session_id"], normalized_plate)
         return self._authorize_exit(
             payload=payload,
             normalized_plate=normalized_plate,
@@ -160,7 +177,7 @@ class ExitService:
             gate_id=payload.gate_id,
             plate_text=normalized_plate,
             session_id=session_record["session_id"],
-            reason="validated",
+            reason="exit_granted",
         )
         access_event = self.access_event_repository.create_exit_event(
             university_id=payload.university_id,
@@ -198,6 +215,9 @@ class ExitService:
         reason: str,
         session_id: str | None = None,
         create_incident: bool = False,
+        publish_status: bool = False,
+        event_type: str = "exit",
+        status_reason: str | None = None,
     ) -> ParkingExitResponse:
         access_event = self.access_event_repository.create_exit_event(
             university_id=payload.university_id,
@@ -227,6 +247,18 @@ class ExitService:
                 description=reason,
             )
             incident_id = incident["id"]
+
+        if publish_status:
+            self.iot_repository.report_gate_status(
+                university_id=payload.university_id,
+                campus_id=payload.campus_id,
+                gate_id=payload.gate_id,
+                plate_text=normalized_plate,
+                barrier="closed",
+                reason=status_reason or reason,
+                event_type=event_type,
+                access_status="rejected",
+            )
 
         return ParkingExitResponse(
             authorized=False,

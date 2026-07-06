@@ -10,6 +10,15 @@ class Settings(BaseSettings):
     min_plate_confidence: float = 0.80
     iot_service_url: str = "http://iot-service:8000"
     iot_service_timeout_seconds: float = 1.5
+    payment_service_url: str = "http://payment-service:8000"
+    payment_service_timeout_seconds: float = 1.5
+    minio_internal_url: str = "http://minio:9000"
+    minio_root_user: str = "minioadmin"
+    minio_root_password: str = "minioadmin123"
+    minio_bucket_faces: str = "parking-faces"
+    minio_bucket_plates: str = "parking-plates"
+    minio_bucket_evidence: str = "parking-evidence"
+    minio_bucket_temp: str = "parking-temp"
     jwt_secret_key: str = ""
     jwt_issuer: str = "smart-parking-university"
     jwt_audience: str = "smart-parking-clients"

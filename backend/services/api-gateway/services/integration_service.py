@@ -6,7 +6,7 @@ import httpx
 from psycopg import connect
 
 from config import settings
-from schemas.integration import DemoOpenGateRequest, ParkingEntryRequest, ParkingExitRequest
+from schemas.integration import DemoOpenGateRequest, ParkingEntryRequest, ParkingExitRequest, PaymentByPlateRequest
 from schemas.system import DependencyHealth
 from security import encode_access_token
 
@@ -97,6 +97,48 @@ class IntegrationService:
             "published": downstream["published"],
             "payload": downstream["payload"],
         }
+
+    def pay_session_by_plate(self, payload: PaymentByPlateRequest) -> dict:
+        return self._post_json(
+            self.targets["payment"],
+            "/payments/pay-by-plate",
+            payload.model_dump(),
+            permissions=["payments.pay"],
+        )
+
+    def proxy_evidence_upload(
+        self,
+        *,
+        file_bytes: bytes,
+        filename: str,
+        content_type: str,
+        image_type: str,
+        plate: str,
+        session_id: str | None,
+    ) -> dict:
+        token = self._build_internal_token(["parking.entry"])
+        files = {
+            "file": (
+                filename,
+                file_bytes,
+                content_type or "application/octet-stream",
+            )
+        }
+        data = {
+            "image_type": image_type,
+            "plate": plate,
+        }
+        if session_id:
+            data["session_id"] = session_id
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(
+                f"{self.targets['parking'].base_url}/evidence/upload",
+                data=data,
+                files=files,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        response.raise_for_status()
+        return response.json()
 
     def _check_http_service(self, name: str, base_url: str) -> DependencyHealth:
         try:
