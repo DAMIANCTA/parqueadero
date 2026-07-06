@@ -110,6 +110,7 @@ docker compose up --build
 - [Seguridad y proteccion de datos](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\security.md)
 - [Diseño de base de datos](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\database-design.md)
 - [Flujo IoT](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\iot-flow.md)
+- [Documentacion final del proyecto](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\final-project-report.md)
 - [Dashboard administrativo](C:\Users\damia\OneDrive\Documentos\parqueadero\web\admin-dashboard\index.html)
 
 ## Estado de los mocks
