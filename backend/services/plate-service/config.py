@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     plate_service_mode: str = "mock"
     plate_default_country_code: str = "EC"
     plate_min_confidence: float = 0.70
+    minio_internal_url: str = "http://minio:9000"
+    minio_root_user: str = "minioadmin"
+    minio_root_password: str = "minioadmin123"
     jwt_secret_key: str = ""
     jwt_issuer: str = "smart-parking-university"
     jwt_audience: str = "smart-parking-clients"

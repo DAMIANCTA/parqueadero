@@ -12,13 +12,24 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [image]
               properties:
                 image:
                   type: string
                   format: binary
+                image_id:
+                  type: string
+                  description: Optional upstream image reference. If omitted for upload mode, the service generates one.
+                bucket:
+                  type: string
+                  description: MinIO bucket name when using object reference mode.
+                object_name:
+                  type: string
+                  description: MinIO object path when using object reference mode.
                 country_code:
                   type: string
+              oneOf:
+                - required: [image]
+                - required: [bucket, object_name]
       responses:
         "200":
           description: Plate detection returned
@@ -26,8 +37,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [plate_text, confidence, bounding_box, mode, valid_format]
+                required: [image_id, plate_text, confidence, bounding_box, mode, valid_format, source]
                 properties:
+                  image_id:
+                    type: string
                   plate_text:
                     type: string
                   confidence:
@@ -38,6 +51,13 @@ paths:
                     enum: [mock, real]
                   valid_format:
                     type: boolean
+                  source:
+                    type: string
+                    enum: [upload, minio]
+                  detector_provider:
+                    type: string
+                  ocr_provider:
+                    type: string
                   bounding_box:
                     type: object
                     properties:

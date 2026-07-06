@@ -17,16 +17,20 @@ class PlateDetectionService:
     def detect_plate(
         self,
         *,
+        image_id: str,
         filename: str,
         content_type: str,
         content: bytes,
+        source: str,
         country_code: str | None,
     ) -> PlateDetectResponse:
         image = PlateImage(
+            image_id=image_id,
             filename=filename or "upload.jpg",
             content_type=content_type or "application/octet-stream",
             content=content,
             country_code=country_code or settings.plate_default_country_code,
+            source=source,
         )
         detector, ocr = self._resolve_pipeline()
         detection = detector.detect(image)
@@ -38,6 +42,7 @@ class PlateDetectionService:
             confidence = min(confidence, 0.60)
 
         return PlateDetectResponse(
+            image_id=image.image_id,
             plate_text=normalized,
             confidence=round(confidence, 4),
             bounding_box=BoundingBox(
@@ -48,6 +53,9 @@ class PlateDetectionService:
             ),
             mode=settings.plate_service_mode,
             valid_format=is_valid,
+            source=image.source,
+            detector_provider=detection.provider,
+            ocr_provider=ocr_result.provider,
         )
 
     def _resolve_pipeline(self):

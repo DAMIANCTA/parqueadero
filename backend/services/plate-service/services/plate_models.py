@@ -3,10 +3,12 @@ from dataclasses import dataclass
 
 @dataclass(slots=True)
 class PlateImage:
+    image_id: str
     filename: str
     content_type: str
     content: bytes
     country_code: str
+    source: str
 
     @property
     def text_preview(self) -> str:
