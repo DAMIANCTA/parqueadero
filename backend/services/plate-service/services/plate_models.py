@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(slots=True)
@@ -9,6 +9,7 @@ class PlateImage:
     content: bytes
     country_code: str
     source: str
+    object_name: str | None = None
 
     @property
     def text_preview(self) -> str:
@@ -26,7 +27,14 @@ class DetectionCandidate:
 
 
 @dataclass(slots=True)
+class PlateTextCandidate:
+    text: str
+    confidence: float
+
+
+@dataclass(slots=True)
 class OcrCandidate:
     text: str
     confidence: float
     provider: str
+    candidates: list[PlateTextCandidate] = field(default_factory=list)

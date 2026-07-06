@@ -1,9 +1,9 @@
 from repositories.mock_repository import MockRepository
-from services.plate_models import DetectionCandidate, OcrCandidate, PlateImage
-from services.plate_ocr import PlateOcr
+from services.ocr_reader import OcrReader
+from services.plate_models import DetectionCandidate, OcrCandidate, PlateImage, PlateTextCandidate
 
 
-class MockPlateOcr(PlateOcr):
+class MockPlateOcr(OcrReader):
     def __init__(self) -> None:
         self.repository = MockRepository()
 
@@ -14,4 +14,8 @@ class MockPlateOcr(PlateOcr):
             text=payload["plate_text"],
             confidence=payload["confidence"],
             provider="mock-ocr",
+            candidates=[
+                PlateTextCandidate(text=item["text"], confidence=item["confidence"])
+                for item in payload["candidates"]
+            ],
         )

@@ -20,71 +20,124 @@ class EntryModeScreen extends StatefulWidget {
 }
 
 class _EntryModeScreenState extends State<EntryModeScreen> {
+  static const String _pendingPlatePlaceholder = 'TMP000';
+
   final ApiClient _apiClient = ApiClient();
   final ImagePicker _picker = ImagePicker();
   final TextEditingController _plateController = TextEditingController();
+  final TextEditingController _manualPlateController = TextEditingController();
+  final TextEditingController _overrideReasonController = TextEditingController();
+
   PersonType _personType = PersonType.visitor;
   bool _faceValid = true;
   bool _livenessValid = true;
-  double _plateConfidence = 0.95;
   double _faceConfidence = 0.95;
   bool _submitting = false;
   bool _uploadingFaceEvidence = false;
-  bool _uploadingPlateEvidence = false;
+  bool _processingPlateEvidence = false;
   LocalEvidenceDraft? _faceEvidence;
   LocalEvidenceDraft? _plateEvidence;
   EvidenceUploadResult? _uploadedFaceEvidence;
   EvidenceUploadResult? _uploadedPlateEvidence;
+  PlateDetectionResult? _plateDetection;
 
   bool get _supportsCameraCapture =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
+  bool get _isSecurityOperator => ParkingAppScope.of(context).isSecurityOperator;
+
+  bool get _usingManualOverride {
+    if (!_isSecurityOperator) {
+      return false;
+    }
+    final manual = _normalizedManualPlate;
+    return manual.isNotEmpty && manual != (_plateDetection?.plateText ?? '');
+  }
+
+  String get _normalizedManualPlate =>
+      _manualPlateController.text.trim().toUpperCase().replaceAll(' ', '').replaceAll('-', '');
+
+  bool get _hasValidDetectedPlate => _plateDetection?.autoAccepted ?? false;
+
+  bool get _hasManualOverrideReady =>
+      _usingManualOverride &&
+      _normalizedManualPlate.length >= 6 &&
+      _overrideReasonController.text.trim().isNotEmpty;
+
+  bool get _canSubmitWithPlate => _hasValidDetectedPlate || _hasManualOverrideReady;
+
+  String get _effectivePlateText {
+    if (_usingManualOverride) {
+      return _normalizedManualPlate;
+    }
+    return _plateDetection?.plateText ?? '';
+  }
+
+  double get _effectivePlateConfidence => _usingManualOverride ? 1.0 : (_plateDetection?.confidence ?? 0.0);
+
   @override
   void dispose() {
     _plateController.dispose();
+    _manualPlateController.dispose();
+    _overrideReasonController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     final selection = ParkingAppScope.of(context).selection;
-    if (selection == null || _plateController.text.trim().isEmpty) {
+    if (selection == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Completa la seleccion y la placa.')),
+        const SnackBar(content: Text('Completa la seleccion de universidad, campus y puerta.')),
+      );
+      return;
+    }
+    if (!_canSubmitWithPlate) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Debes detectar una placa valida antes de registrar la entrada.')),
       );
       return;
     }
 
     setState(() => _submitting = true);
     try {
-      final normalizedPlate = _plateController.text.trim().toUpperCase();
-      final faceEvidence = await _ensureEvidenceUploaded(
-        isFace: true,
+      final effectivePlate = _effectivePlateText;
+      final faceEvidence = await _ensureFaceEvidenceUploaded(
         imageType: EvidenceImageType.faceEntry,
-        plate: normalizedPlate,
+        plate: effectivePlate,
       );
-      final plateEvidence = await _ensureEvidenceUploaded(
-        isFace: false,
-        imageType: EvidenceImageType.plateEntry,
-        plate: normalizedPlate,
-      );
+      final plateEvidence = _uploadedPlateEvidence;
+      if (plateEvidence == null) {
+        throw Exception('No hay evidencia de placa cargada.');
+      }
+
+      final session = ParkingAppScope.of(context).session;
       final result = await _apiClient.submitEntry(
         universityId: selection.universityId,
         campusId: selection.campusId,
         gateId: selection.gateId,
-        plateText: normalizedPlate,
+        plateText: effectivePlate,
         faceImageId: faceEvidence.imageId,
         plateImageId: plateEvidence.imageId,
-        faceMockId: _buildFaceImageId(normalizedPlate),
+        faceMockId: _buildFaceImageId(effectivePlate),
+        operatorUsername: session?.username,
+        plateDetectedText: _plateDetection?.plateText,
+        plateDetectionConfidence: _plateDetection?.confidence,
+        plateOverrideReason: _usingManualOverride ? _overrideReasonController.text.trim() : null,
         livenessScore: _livenessValid ? 0.95 : 0.30,
         personType: _personType,
-        confidencePlate: _plateConfidence,
+        confidencePlate: _effectivePlateConfidence,
         confidenceFace: _faceValid ? _faceConfidence : 0.35,
       );
       if (!mounted) return;
       ParkingAppScope.of(context).addHistory(
-        HistoryItem(mode: ModeType.entry, plateText: normalizedPlate, result: result),
+        HistoryItem(
+          mode: ModeType.entry,
+          plateText: effectivePlate,
+          result: result,
+          plateDetection: _plateDetection,
+        ),
       );
       Navigator.of(context).pushNamed(ResultScreen.routeName, arguments: result);
     } catch (error) {
@@ -106,16 +159,17 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
         return;
       }
       final bytes = await file.readAsBytes();
-      _setEvidenceDraft(
-        isFace: isFace,
-        draft: LocalEvidenceDraft(
-          label: source == ImageSource.camera ? 'Capturada' : 'Seleccionada',
-          fileName: file.name,
-          bytes: bytes,
-          contentType: 'image/jpeg',
-          isMock: false,
-        ),
+      final draft = LocalEvidenceDraft(
+        label: source == ImageSource.camera ? 'Capturada' : 'Seleccionada',
+        fileName: file.name,
+        bytes: bytes,
+        contentType: 'image/jpeg',
+        isMock: false,
       );
+      _setEvidenceDraft(isFace: isFace, draft: draft);
+      if (!isFace) {
+        await _uploadAndDetectPlate();
+      }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -124,24 +178,12 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     }
   }
 
-  void _useMockEvidence({required bool isFace}) {
-    final normalizedPlate = _plateController.text.trim().toUpperCase();
-    final slot = isFace ? 'face-entry' : 'plate-entry';
-    final bytes = Uint8List.fromList(
-      utf8.encode(
-        'mock:$slot:${normalizedPlate.isEmpty ? 'NO_PLATE' : normalizedPlate}:${DateTime.now().toIso8601String()}',
-      ),
-    );
-    _setEvidenceDraft(
-      isFace: isFace,
-      draft: LocalEvidenceDraft(
-        label: 'Mock generado',
-        fileName: '$slot-${normalizedPlate.isEmpty ? 'pending' : normalizedPlate}.txt',
-        bytes: bytes,
-        contentType: 'text/plain',
-        isMock: true,
-      ),
-    );
+  Future<void> _useMockEvidence({required bool isFace}) async {
+    final draft = _buildDefaultMockEvidence(isFace: isFace);
+    _setEvidenceDraft(isFace: isFace, draft: draft);
+    if (!isFace) {
+      await _uploadAndDetectPlate();
+    }
   }
 
   void _setEvidenceDraft({required bool isFace, required LocalEvidenceDraft draft}) {
@@ -152,54 +194,27 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
       } else {
         _plateEvidence = draft;
         _uploadedPlateEvidence = null;
+        _plateDetection = null;
+        _plateController.clear();
+        _manualPlateController.clear();
+        _overrideReasonController.clear();
       }
     });
   }
 
-  Future<EvidenceUploadResult> _ensureEvidenceUploaded({
-    required bool isFace,
+  Future<EvidenceUploadResult> _ensureFaceEvidenceUploaded({
     required EvidenceImageType imageType,
     required String plate,
   }) async {
-    final existing = isFace ? _uploadedFaceEvidence : _uploadedPlateEvidence;
+    final existing = _uploadedFaceEvidence;
     if (existing != null && existing.plate == plate) {
       return existing;
     }
-    return _uploadEvidenceManually(isFace: isFace, imageType: imageType, plate: plate);
-  }
 
-  LocalEvidenceDraft _buildDefaultMockEvidence({required bool isFace, required String plate}) {
-    final slot = isFace ? 'face-entry' : 'plate-entry';
-    return LocalEvidenceDraft(
-      label: 'Mock automatico',
-      fileName: '$slot-$plate.txt',
-      bytes: Uint8List.fromList(utf8.encode('mock:$slot:$plate')),
-      contentType: 'text/plain',
-      isMock: true,
-    );
-  }
-
-  Future<EvidenceUploadResult> _uploadEvidenceManually({
-    required bool isFace,
-    required EvidenceImageType imageType,
-    required String plate,
-  }) async {
     final normalizedPlate = plate.trim().toUpperCase();
-    if (normalizedPlate.isEmpty) {
-      throw Exception('Ingresa la placa antes de subir evidencias.');
-    }
+    final draft = _faceEvidence ?? _buildDefaultMockEvidence(isFace: true);
 
-    final draft = isFace
-        ? (_faceEvidence ?? _buildDefaultMockEvidence(isFace: true, plate: normalizedPlate))
-        : (_plateEvidence ?? _buildDefaultMockEvidence(isFace: false, plate: normalizedPlate));
-
-    setState(() {
-      if (isFace) {
-        _uploadingFaceEvidence = true;
-      } else {
-        _uploadingPlateEvidence = true;
-      }
-    });
+    setState(() => _uploadingFaceEvidence = true);
     try {
       final result = await _apiClient.uploadEvidence(
         imageType: imageType,
@@ -208,27 +223,89 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
       );
       if (mounted) {
         setState(() {
-          if (isFace) {
-            _faceEvidence = draft;
-            _uploadedFaceEvidence = result;
-          } else {
-            _plateEvidence = draft;
-            _uploadedPlateEvidence = result;
-          }
+          _faceEvidence = draft;
+          _uploadedFaceEvidence = result;
         });
       }
       return result;
     } finally {
       if (mounted) {
-        setState(() {
-          if (isFace) {
-            _uploadingFaceEvidence = false;
-          } else {
-            _uploadingPlateEvidence = false;
-          }
-        });
+        setState(() => _uploadingFaceEvidence = false);
       }
     }
+  }
+
+  Future<void> _uploadAndDetectPlate() async {
+    final selection = ParkingAppScope.of(context).selection;
+    if (selection == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona universidad, campus y puerta antes de capturar la placa.')),
+      );
+      return;
+    }
+
+    final draft = _plateEvidence ?? _buildDefaultMockEvidence(isFace: false);
+    setState(() => _processingPlateEvidence = true);
+    try {
+      final upload = await _apiClient.uploadEvidence(
+        imageType: EvidenceImageType.plateEntry,
+        plate: _pendingPlatePlaceholder,
+        evidence: draft,
+      );
+      final detection = await _apiClient.detectPlate(
+        imageId: upload.imageId,
+        universityId: selection.universityId,
+        campusId: selection.campusId,
+        gateId: selection.gateId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _uploadedPlateEvidence = upload;
+        _plateDetection = detection;
+        _plateController.text = detection.plateText;
+      });
+      if (!detection.autoAccepted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('La deteccion de placa no tiene confianza suficiente.')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _uploadedPlateEvidence = null;
+        _plateDetection = null;
+        _plateController.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingPlateEvidence = false);
+      }
+    }
+  }
+
+  LocalEvidenceDraft _buildDefaultMockEvidence({required bool isFace}) {
+    final mockPlate = isFace ? (_effectivePlateText.isEmpty ? _recommendedMockPlate() : _effectivePlateText) : _recommendedMockPlate();
+    final slot = isFace ? 'face-entry' : 'plate-entry';
+    return LocalEvidenceDraft(
+      label: isFace ? 'Mock automatico rostro' : 'Mock automatico placa',
+      fileName: '$slot-$mockPlate.txt',
+      bytes: Uint8List.fromList(utf8.encode('mock:$slot:$mockPlate')),
+      contentType: 'text/plain',
+      isMock: true,
+    );
+  }
+
+  String _recommendedMockPlate() {
+    return switch (_personType) {
+      PersonType.visitor => 'VIS1001',
+      PersonType.student => 'ABC1234',
+      PersonType.teacher => 'XYZ9876',
+      PersonType.employee => 'EMP2026',
+    };
   }
 
   String _buildFaceImageId(String plate) {
@@ -243,16 +320,7 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     };
   }
 
-  Widget _buildEvidenceCard({
-    required String title,
-    required LocalEvidenceDraft? draft,
-    required EvidenceUploadResult? uploaded,
-    required bool uploading,
-    required VoidCallback onUseMock,
-    required VoidCallback onPickGallery,
-    required VoidCallback onUpload,
-    VoidCallback? onCapture,
-  }) {
+  Widget _buildFaceEvidenceCard() {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -262,13 +330,13 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.titleSmall),
+          Text('Evidencia de rostro', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
-          Text(draft == null ? 'Sin evidencia seleccionada.' : '${draft.label} - ${draft.fileName}'),
-          if (uploaded != null) ...[
+          Text(_faceEvidence == null ? 'Sin evidencia seleccionada.' : '${_faceEvidence!.label} - ${_faceEvidence!.fileName}'),
+          if (_uploadedFaceEvidence != null) ...[
             const SizedBox(height: 4),
-            Text('Bucket: ${uploaded.bucket}'),
-            Text('Image ID: ${uploaded.imageId}'),
+            Text('Bucket: ${_uploadedFaceEvidence!.bucket}'),
+            Text('Image ID: ${_uploadedFaceEvidence!.imageId}'),
           ],
           const SizedBox(height: 12),
           Wrap(
@@ -276,30 +344,144 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
             runSpacing: 8,
             children: [
               OutlinedButton.icon(
-                onPressed: onPickGallery,
+                onPressed: () => _pickEvidence(isFace: true, source: ImageSource.gallery),
                 icon: const Icon(Icons.photo_library_outlined),
                 label: const Text('Seleccionar'),
               ),
-              if (onCapture != null)
+              if (_supportsCameraCapture)
                 OutlinedButton.icon(
-                  onPressed: onCapture,
+                  onPressed: () => _pickEvidence(isFace: true, source: ImageSource.camera),
                   icon: const Icon(Icons.photo_camera_outlined),
                   label: const Text('Capturar'),
                 ),
               OutlinedButton.icon(
-                onPressed: onUseMock,
+                onPressed: () => _useMockEvidence(isFace: true),
                 icon: const Icon(Icons.auto_fix_high_outlined),
                 label: const Text('Usar mock'),
               ),
-              FilledButton.icon(
-                onPressed: uploading ? null : onUpload,
-                icon: uploading
-                    ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.cloud_upload_outlined),
-                label: Text(uploading ? 'Subiendo' : 'Subir'),
-              ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlateDetectionCard() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.black12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Captura y deteccion de placa', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          Text(_plateEvidence == null ? 'Sin evidencia seleccionada.' : '${_plateEvidence!.label} - ${_plateEvidence!.fileName}'),
+          if (_uploadedPlateEvidence != null) ...[
+            const SizedBox(height: 4),
+            Text('Image ID: ${_uploadedPlateEvidence!.imageId}'),
+          ],
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _processingPlateEvidence ? null : () => _pickEvidence(isFace: false, source: ImageSource.gallery),
+                icon: const Icon(Icons.photo_library_outlined),
+                label: const Text('Seleccionar placa'),
+              ),
+              if (_supportsCameraCapture)
+                FilledButton.icon(
+                  onPressed: _processingPlateEvidence ? null : () => _pickEvidence(isFace: false, source: ImageSource.camera),
+                  icon: const Icon(Icons.photo_camera_outlined),
+                  label: const Text('Capturar placa'),
+                ),
+              OutlinedButton.icon(
+                onPressed: _processingPlateEvidence ? null : () => _useMockEvidence(isFace: false),
+                icon: const Icon(Icons.auto_fix_high_outlined),
+                label: const Text('Usar mock'),
+              ),
+              if (_plateEvidence != null)
+                OutlinedButton.icon(
+                  onPressed: _processingPlateEvidence ? null : _uploadAndDetectPlate,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Reintentar captura'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_processingPlateEvidence)
+            const Row(
+              children: [
+                SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                SizedBox(width: 12),
+                Text('Detectando placa...'),
+              ],
+            )
+          else if (_plateDetection != null) ...[
+            TextField(
+              controller: _plateController,
+              readOnly: true,
+              decoration: const InputDecoration(
+                labelText: 'Placa detectada',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _plateDetection!.autoAccepted ? Colors.green.withOpacity(0.08) : Colors.orange.withOpacity(0.08),
+                border: Border.all(color: _plateDetection!.autoAccepted ? Colors.green : Colors.orange),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Estado: ${_plateDetection!.status}'),
+                  Text('Confianza: ${(_plateDetection!.confidence * 100).toStringAsFixed(0)}%'),
+                  Text('Proveedor detector: ${_plateDetection!.detectorProvider}'),
+                  Text('Proveedor OCR: ${_plateDetection!.ocrProvider}'),
+                  if (_plateDetection!.candidates.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text('Candidatos:', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 4),
+                    ..._plateDetection!.candidates.map(
+                      (candidate) => Text(
+                        '${candidate.text} - ${(candidate.confidence * 100).toStringAsFixed(0)}%',
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ] else
+            const Text('Captura la placa para iniciar la deteccion automatica.'),
+          if (_isSecurityOperator) ...[
+            const SizedBox(height: 16),
+            TextField(
+              controller: _manualPlateController,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                labelText: 'Correccion manual de placa (solo seguridad)',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() => _plateController.text = _usingManualOverride ? _normalizedManualPlate : (_plateDetection?.plateText ?? '')),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _overrideReasonController,
+              decoration: const InputDecoration(
+                labelText: 'Motivo de correccion',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
         ],
       ),
     );
@@ -321,63 +503,9 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
             onChanged: (value) => setState(() => _personType = value ?? PersonType.visitor),
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _plateController,
-            textCapitalization: TextCapitalization.characters,
-            decoration: const InputDecoration(
-              labelText: 'Placa',
-              helperText: 'Ejemplo visitante: VIS1001 | Registradas: ABC1234, XYZ9876, EMP2026, EXP2026',
-              border: OutlineInputBorder(),
-            ),
-          ),
+          _buildPlateDetectionCard(),
           const SizedBox(height: 16),
-          _buildEvidenceCard(
-            title: 'Evidencia de rostro',
-            draft: _faceEvidence,
-            uploaded: _uploadedFaceEvidence,
-            uploading: _uploadingFaceEvidence,
-            onUseMock: () => _useMockEvidence(isFace: true),
-            onPickGallery: () => _pickEvidence(isFace: true, source: ImageSource.gallery),
-            onUpload: () async {
-              try {
-                await _uploadEvidenceManually(
-                  isFace: true,
-                  imageType: EvidenceImageType.faceEntry,
-                  plate: _plateController.text,
-                );
-              } catch (error) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
-                );
-              }
-            },
-            onCapture: _supportsCameraCapture ? () => _pickEvidence(isFace: true, source: ImageSource.camera) : null,
-          ),
-          const SizedBox(height: 12),
-          _buildEvidenceCard(
-            title: 'Evidencia de placa',
-            draft: _plateEvidence,
-            uploaded: _uploadedPlateEvidence,
-            uploading: _uploadingPlateEvidence,
-            onUseMock: () => _useMockEvidence(isFace: false),
-            onPickGallery: () => _pickEvidence(isFace: false, source: ImageSource.gallery),
-            onUpload: () async {
-              try {
-                await _uploadEvidenceManually(
-                  isFace: false,
-                  imageType: EvidenceImageType.plateEntry,
-                  plate: _plateController.text,
-                );
-              } catch (error) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
-                );
-              }
-            },
-            onCapture: _supportsCameraCapture ? () => _pickEvidence(isFace: false, source: ImageSource.camera) : null,
-          ),
+          _buildFaceEvidenceCard(),
           const SizedBox(height: 12),
           SwitchListTile(
             value: _faceValid,
@@ -393,13 +521,11 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
             onChanged: (value) => setState(() => _livenessValid = value),
           ),
           const SizedBox(height: 20),
-          Text('Confianza placa: ${_plateConfidence.toStringAsFixed(2)}'),
-          Slider(value: _plateConfidence, onChanged: (value) => setState(() => _plateConfidence = value)),
           Text('Confianza rostro: ${_faceConfidence.toStringAsFixed(2)}'),
           Slider(value: _faceConfidence, onChanged: (value) => setState(() => _faceConfidence = value)),
           const SizedBox(height: 24),
           FilledButton(
-            onPressed: _submitting ? null : _submit,
+            onPressed: (_submitting || !_canSubmitWithPlate || _processingPlateEvidence) ? null : _submit,
             child: _submitting
                 ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Text('Registrar entrada'),

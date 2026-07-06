@@ -213,6 +213,10 @@ class ExitService:
                 "gate_id": payload.gate_id,
                 "plate_text": normalized_plate,
                 "campus_id": payload.campus_id,
+                "operator_username": payload.operator_username,
+                "plate_detected_text": payload.plate_detected_text,
+                "plate_detection_confidence": payload.plate_detection_confidence,
+                "plate_override_reason": payload.plate_override_reason,
             },
         )
         return ParkingExitResponse(
@@ -254,6 +258,10 @@ class ExitService:
                 "plate_text": normalized_plate,
                 "campus_id": payload.campus_id,
                 "reason": reason,
+                "operator_username": payload.operator_username,
+                "plate_detected_text": payload.plate_detected_text,
+                "plate_detection_confidence": payload.plate_detection_confidence,
+                "plate_override_reason": payload.plate_override_reason,
             },
         )
         incident_id = None

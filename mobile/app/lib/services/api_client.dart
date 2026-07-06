@@ -110,6 +110,53 @@ class ApiClient {
     );
   }
 
+  Future<PlateDetectionResult> detectPlate({
+    required String imageId,
+    required String universityId,
+    required String campusId,
+    required String gateId,
+  }) async {
+    final response = await _client.post(
+      Uri.parse('${AppConfig.apiBaseUrl}/plates/detect'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'image_id': imageId,
+        'university_id': universityId,
+        'campus_id': campusId,
+        'gate_id': gateId,
+      }),
+    );
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode >= 400) {
+      throw Exception(body['detail'] ?? 'No se pudo detectar la placa.');
+    }
+
+    final rawCandidates = (body['candidates'] as List? ?? const []);
+    return PlateDetectionResult(
+      imageId: body['image_id'] as String? ?? imageId,
+      plateText: body['plate_text'] as String? ?? '',
+      confidence: (body['confidence'] as num? ?? 0).toDouble(),
+      boundingBox: Map<String, dynamic>.from(body['bounding_box'] as Map? ?? const {}),
+      candidates: rawCandidates
+          .whereType<Map>()
+          .map(
+            (item) => PlateCandidateResult(
+              text: item['text'] as String? ?? '',
+              confidence: (item['confidence'] as num? ?? 0).toDouble(),
+            ),
+          )
+          .toList(),
+      status: body['status'] as String? ?? 'NOT_DETECTED',
+      mode: body['mode'] as String? ?? 'mock',
+      validFormat: body['valid_format'] as bool? ?? false,
+      source: body['source'] as String? ?? 'minio',
+      detectorProvider: body['detector_provider'] as String? ?? 'unknown',
+      ocrProvider: body['ocr_provider'] as String? ?? 'unknown',
+      detectedAt: DateTime.now(),
+    );
+  }
+
   Future<AuthorizationResult> submitEntry({
     required String universityId,
     required String campusId,
@@ -118,6 +165,10 @@ class ApiClient {
     required String faceImageId,
     String? plateImageId,
     String? faceMockId,
+    String? operatorUsername,
+    String? plateDetectedText,
+    double? plateDetectionConfidence,
+    String? plateOverrideReason,
     required double livenessScore,
     required PersonType personType,
     required double confidencePlate,
@@ -134,6 +185,10 @@ class ApiClient {
         'face_image_id': faceImageId,
         'plate_image_id': plateImageId,
         'face_mock_id': faceMockId,
+        'operator_username': operatorUsername,
+        'plate_detected_text': plateDetectedText,
+        'plate_detection_confidence': plateDetectionConfidence,
+        'plate_override_reason': plateOverrideReason,
         'liveness_score': livenessScore,
         'person_type': personType.value,
         'confidence_plate': confidencePlate,
@@ -151,6 +206,10 @@ class ApiClient {
     required String faceImageId,
     String? plateImageId,
     String? faceMockId,
+    String? operatorUsername,
+    String? plateDetectedText,
+    double? plateDetectionConfidence,
+    String? plateOverrideReason,
     required double livenessScore,
     required double confidencePlate,
     required double confidenceFace,
@@ -166,6 +225,10 @@ class ApiClient {
         'face_image_id': faceImageId,
         'plate_image_id': plateImageId,
         'face_mock_id': faceMockId,
+        'operator_username': operatorUsername,
+        'plate_detected_text': plateDetectedText,
+        'plate_detection_confidence': plateDetectionConfidence,
+        'plate_override_reason': plateOverrideReason,
         'liveness_score': livenessScore,
         'confidence_plate': confidencePlate,
         'confidence_face': confidenceFace,

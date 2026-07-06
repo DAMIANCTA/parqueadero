@@ -119,6 +119,10 @@ class EntryService:
                 "gate_id": payload.gate_id,
                 "plate_text": normalized_plate,
                 "person_type": payload.person_type,
+                "operator_username": payload.operator_username,
+                "plate_detected_text": payload.plate_detected_text,
+                "plate_detection_confidence": payload.plate_detection_confidence,
+                "plate_override_reason": payload.plate_override_reason,
             },
         )
 
@@ -150,6 +154,10 @@ class EntryService:
                 "plate_text": normalized_plate,
                 "person_type": payload.person_type,
                 "reason": reason,
+                "operator_username": payload.operator_username,
+                "plate_detected_text": payload.plate_detected_text,
+                "plate_detection_confidence": payload.plate_detection_confidence,
+                "plate_override_reason": payload.plate_override_reason,
             },
         )
         return ParkingEntryResponse(

@@ -12,6 +12,7 @@ class ParkingAppState extends ChangeNotifier {
   List<HistoryItem> get history => List.unmodifiable(_history.reversed);
 
   bool get isLoggedIn => _session != null;
+  bool get isSecurityOperator => _session?.isSecurityOperator ?? false;
 
   void login({required String username, required String displayName}) {
     _session = OperatorSession(

@@ -6,6 +6,8 @@ from schemas.integration import (
     DemoOpenGateResponse,
     EvidenceUploadResponse,
     ParkingAuthorizationResponse,
+    PlateDetectRequest,
+    PlateDetectResponse,
     ParkingEntryRequest,
     ParkingExitRequest,
     PaymentByPlateRequest,
@@ -83,3 +85,14 @@ async def upload_evidence(
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Parking service unavailable: {exc}") from exc
     return EvidenceUploadResponse(**response)
+
+
+@router.post("/plates/detect", response_model=PlateDetectResponse)
+def detect_plate(payload: PlateDetectRequest) -> PlateDetectResponse:
+    try:
+        response = integration_service.proxy_plate_detection(payload)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Plate service unavailable: {exc}") from exc
+    return PlateDetectResponse(**response)

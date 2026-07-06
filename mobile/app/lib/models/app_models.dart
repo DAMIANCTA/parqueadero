@@ -70,6 +70,8 @@ class OperatorSession {
   final String username;
   final String displayName;
   final DateTime loggedAt;
+
+  bool get isSecurityOperator => username.toLowerCase().contains('security');
 }
 
 class AccessPointSelection {
@@ -204,6 +206,51 @@ class EvidenceUploadResult {
   final String? sessionId;
 }
 
+class PlateCandidateResult {
+  const PlateCandidateResult({
+    required this.text,
+    required this.confidence,
+  });
+
+  final String text;
+  final double confidence;
+}
+
+class PlateDetectionResult {
+  const PlateDetectionResult({
+    required this.imageId,
+    required this.plateText,
+    required this.confidence,
+    required this.boundingBox,
+    required this.candidates,
+    required this.status,
+    required this.mode,
+    required this.validFormat,
+    required this.source,
+    required this.detectorProvider,
+    required this.ocrProvider,
+    required this.detectedAt,
+  });
+
+  static const double minimumAutoAcceptance = 0.75;
+
+  final String imageId;
+  final String plateText;
+  final double confidence;
+  final Map<String, dynamic> boundingBox;
+  final List<PlateCandidateResult> candidates;
+  final String status;
+  final String mode;
+  final bool validFormat;
+  final String source;
+  final String detectorProvider;
+  final String ocrProvider;
+  final DateTime detectedAt;
+
+  bool get detected => status == 'DETECTED' && plateText.isNotEmpty;
+  bool get autoAccepted => detected && confidence >= minimumAutoAcceptance;
+}
+
 class LivenessFrame {
   const LivenessFrame({
     required this.frameId,
@@ -247,9 +294,11 @@ class HistoryItem {
     required this.mode,
     required this.plateText,
     required this.result,
+    this.plateDetection,
   });
 
   final ModeType mode;
   final String plateText;
   final AuthorizationResult result;
+  final PlateDetectionResult? plateDetection;
 }

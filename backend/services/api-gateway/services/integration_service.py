@@ -6,7 +6,7 @@ import httpx
 from psycopg import connect
 
 from config import settings
-from schemas.integration import DemoOpenGateRequest, ParkingEntryRequest, ParkingExitRequest, PaymentByPlateRequest
+from schemas.integration import DemoOpenGateRequest, ParkingEntryRequest, ParkingExitRequest, PaymentByPlateRequest, PlateDetectRequest
 from schemas.system import DependencyHealth
 from security import encode_access_token
 
@@ -104,6 +104,14 @@ class IntegrationService:
             "/payments/pay-by-plate",
             payload.model_dump(),
             permissions=["payments.pay"],
+        )
+
+    def proxy_plate_detection(self, payload: PlateDetectRequest) -> dict:
+        return self._post_json(
+            self.targets["plate"],
+            "/plates/detect",
+            payload.model_dump(),
+            permissions=["plates.detect"],
         )
 
     def proxy_evidence_upload(

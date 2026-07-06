@@ -20,6 +20,10 @@ class ParkingEntryRequest(BaseModel):
     person_type: PersonType
     confidence_plate: float = Field(ge=0, le=1)
     confidence_face: float = Field(ge=0, le=1)
+    operator_username: str | None = None
+    plate_detected_text: str | None = None
+    plate_detection_confidence: float | None = Field(default=None, ge=0, le=1)
+    plate_override_reason: str | None = None
 
 
 class ParkingExitRequest(BaseModel):
@@ -35,6 +39,10 @@ class ParkingExitRequest(BaseModel):
     liveness_score: float = Field(ge=0, le=1)
     confidence_plate: float = Field(ge=0, le=1)
     confidence_face: float = Field(ge=0, le=1)
+    operator_username: str | None = None
+    plate_detected_text: str | None = None
+    plate_detection_confidence: float | None = Field(default=None, ge=0, le=1)
+    plate_override_reason: str | None = None
 
 
 class SessionData(BaseModel):

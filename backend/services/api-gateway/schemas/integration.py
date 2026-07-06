@@ -20,6 +20,10 @@ class ParkingEntryRequest(BaseModel):
     person_type: PersonType
     confidence_plate: float = Field(ge=0, le=1)
     confidence_face: float = Field(ge=0, le=1)
+    operator_username: str | None = None
+    plate_detected_text: str | None = None
+    plate_detection_confidence: float | None = Field(default=None, ge=0, le=1)
+    plate_override_reason: str | None = None
 
 
 class ParkingExitRequest(BaseModel):
@@ -35,6 +39,10 @@ class ParkingExitRequest(BaseModel):
     liveness_score: float = Field(ge=0, le=1)
     confidence_plate: float = Field(ge=0, le=1)
     confidence_face: float = Field(ge=0, le=1)
+    operator_username: str | None = None
+    plate_detected_text: str | None = None
+    plate_detection_confidence: float | None = Field(default=None, ge=0, le=1)
+    plate_override_reason: str | None = None
 
 
 class SessionData(BaseModel):
@@ -108,3 +116,31 @@ class EvidenceUploadResponse(BaseModel):
     created_at: str
     expires_at: str | None = None
     status: str
+
+
+class PlateDetectRequest(BaseModel):
+    image_id: str = Field(min_length=1)
+    university_id: str | None = None
+    campus_id: str | None = None
+    gate_id: str | None = None
+    country_code: str | None = None
+    plate_image_id: str | None = None
+
+
+class PlateCandidateResponse(BaseModel):
+    text: str
+    confidence: float = Field(ge=0, le=1)
+
+
+class PlateDetectResponse(BaseModel):
+    image_id: str
+    plate_text: str
+    confidence: float = Field(ge=0, le=1)
+    bounding_box: dict
+    candidates: list[PlateCandidateResponse]
+    status: str
+    mode: str
+    valid_format: bool
+    source: str
+    detector_provider: str
+    ocr_provider: str

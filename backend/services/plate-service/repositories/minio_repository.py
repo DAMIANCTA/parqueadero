@@ -1,9 +1,12 @@
+import mimetypes
+from pathlib import PurePosixPath
 from urllib.parse import urlparse
 
 from minio import Minio
 from minio.error import S3Error
 
 from config import settings
+from services.image_payload import LoadedImagePayload
 
 
 class MinioRepository:
@@ -27,3 +30,16 @@ class MinioRepository:
         finally:
             response.close()
             response.release_conn()
+
+    def load_registered_image(self, *, image_id: str, bucket: str, object_name: str) -> LoadedImagePayload:
+        payload = self.get_object_bytes(bucket=bucket, object_name=object_name)
+        guessed_content_type, _ = mimetypes.guess_type(object_name)
+        filename = PurePosixPath(object_name).name or "minio-object.bin"
+        return LoadedImagePayload(
+            image_id=image_id,
+            filename=filename,
+            content_type=guessed_content_type or "application/octet-stream",
+            content=payload,
+            source="minio",
+            object_name=object_name,
+        )

@@ -1,14 +1,35 @@
 openapi: 3.0.3
 info:
   title: Plate Recognition Service
-  version: 0.1.0
+  version: 0.2.0
 paths:
   /plates/detect:
     post:
-      summary: Detect vehicle plate from image
+      summary: Detect vehicle plate from evidence image
+      description: |
+        Supports two modes:
+        1. JSON request with `image_id` referencing an evidence image already stored in MinIO.
+        2. Multipart upload for local/mock testing.
       requestBody:
         required: true
         content:
+          application/json:
+            schema:
+              type: object
+              required: [image_id]
+              properties:
+                image_id:
+                  type: string
+                plate_image_id:
+                  type: string
+                university_id:
+                  type: string
+                campus_id:
+                  type: string
+                gate_id:
+                  type: string
+                country_code:
+                  type: string
           multipart/form-data:
             schema:
               type: object
@@ -18,17 +39,17 @@ paths:
                   format: binary
                 image_id:
                   type: string
-                  description: Optional upstream image reference. If omitted for upload mode, the service generates one.
+                plate_image_id:
+                  type: string
                 bucket:
                   type: string
-                  description: MinIO bucket name when using object reference mode.
                 object_name:
                   type: string
-                  description: MinIO object path when using object reference mode.
                 country_code:
                   type: string
               oneOf:
                 - required: [image]
+                - required: [image_id]
                 - required: [bucket, object_name]
       responses:
         "200":
@@ -37,7 +58,16 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [image_id, plate_text, confidence, bounding_box, mode, valid_format, source]
+                required:
+                  - image_id
+                  - plate_text
+                  - confidence
+                  - bounding_box
+                  - candidates
+                  - status
+                  - mode
+                  - valid_format
+                  - source
                 properties:
                   image_id:
                     type: string
@@ -46,6 +76,9 @@ paths:
                   confidence:
                     type: number
                     format: float
+                  status:
+                    type: string
+                    enum: [DETECTED, LOW_CONFIDENCE, NOT_DETECTED]
                   mode:
                     type: string
                     enum: [mock, real]
@@ -69,3 +102,13 @@ paths:
                         type: integer
                       height:
                         type: integer
+                  candidates:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        text:
+                          type: string
+                        confidence:
+                          type: number
+                          format: float
