@@ -12,6 +12,8 @@ class ParkingEntryRequest(BaseModel):
     gate_id: str
     plate_text: str = Field(min_length=3, max_length=20)
     face_image_id: str
+    plate_image_id: str | None = None
+    face_mock_id: str | None = None
     face_evidence_id: str | None = None
     plate_evidence_id: str | None = None
     liveness_score: float = Field(ge=0, le=1)
@@ -26,6 +28,8 @@ class ParkingExitRequest(BaseModel):
     gate_id: str
     plate_text: str = Field(min_length=3, max_length=20)
     face_image_id: str
+    plate_image_id: str | None = None
+    face_mock_id: str | None = None
     face_evidence_id: str | None = None
     plate_evidence_id: str | None = None
     liveness_score: float = Field(ge=0, le=1)
@@ -99,4 +103,8 @@ class EvidenceUploadResponse(BaseModel):
     image_type: str
     session_id: str | None = None
     plate: str
+    hash_sha256: str
+    encrypted: bool
     created_at: str
+    expires_at: str | None = None
+    status: str

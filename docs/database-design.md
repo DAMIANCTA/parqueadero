@@ -364,6 +364,7 @@ La base biometrica ya queda implementada de forma separada en:
 - [database/postgres-biometrics/migrations/001_enable_extensions.sql](C:\Users\damia\OneDrive\Documentos\parqueadero\database\postgres-biometrics\migrations\001_enable_extensions.sql)
 - [database/postgres-biometrics/migrations/002_create_biometric_schema.sql](C:\Users\damia\OneDrive\Documentos\parqueadero\database\postgres-biometrics\migrations\002_create_biometric_schema.sql)
 - [database/postgres-biometrics/migrations/003_create_indexes_and_triggers.sql](C:\Users\damia\OneDrive\Documentos\parqueadero\database\postgres-biometrics\migrations\003_create_indexes_and_triggers.sql)
+- [database/postgres-biometrics/migrations/004_extend_image_evidence_for_parking.sql](C:\Users\damia\OneDrive\Documentos\parqueadero\database\postgres-biometrics\migrations\004_extend_image_evidence_for_parking.sql)
 
 ### Principios aplicados
 
@@ -382,16 +383,28 @@ Campos clave:
 - `id`
 - `university_id`
 - `person_id`
+- `session_id`
+- `plate`
 - `minio_bucket`
+- `bucket`
 - `object_path`
+- `object_name`
 - `object_version`
 - `sha256_hash`
+- `hash_sha256`
 - `image_type`
 - `content_type`
 - `captured_at`
 - `expires_at`
 - `encrypted`
 - `status`
+
+Campos operativos agregados para el flujo de parqueadero:
+
+- `session_id` enlaza evidencia con la sesion mock o transaccional.
+- `plate` facilita consulta rapida por placa.
+- `bucket` y `object_name` simplifican el consumo por los servicios actuales.
+- `hash_sha256` conserva el hash operativo pedido para integridad.
 
 ### `face_templates`
 

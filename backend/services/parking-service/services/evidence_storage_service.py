@@ -1,4 +1,5 @@
 import re
+from hashlib import sha256
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -37,11 +38,14 @@ class EvidenceStorageService:
             payload=file_bytes,
             content_type=content_type,
         )
+        hash_sha256 = sha256(file_bytes).hexdigest()
         return self.repository.create_reference(
             bucket=bucket,
             object_name=object_name,
             image_type=image_type,
             plate=normalized_plate,
+            hash_sha256=hash_sha256,
+            content_type=content_type,
             session_id=session_id,
         )
 

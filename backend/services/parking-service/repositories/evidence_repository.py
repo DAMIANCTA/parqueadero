@@ -1,10 +1,13 @@
-from datetime import datetime, timezone
-from uuid import uuid4
+from typing import Any
+from uuid import UUID, uuid4
+
+from psycopg import connect
+from psycopg.rows import dict_row
+
+from config import settings
 
 
 class EvidenceRepository:
-    evidence_records: dict[str, dict] = {}
-
     def create_reference(
         self,
         *,
@@ -12,30 +15,163 @@ class EvidenceRepository:
         object_name: str,
         image_type: str,
         plate: str,
+        hash_sha256: str,
+        content_type: str = "application/octet-stream",
         session_id: str | None = None,
+        encrypted: bool = True,
+        expires_at: str | None = None,
+        status: str = "active",
     ) -> dict:
         image_id = str(uuid4())
-        record = {
-            "image_id": image_id,
-            "bucket": bucket,
-            "object_name": object_name,
-            "image_type": image_type,
-            "session_id": session_id,
-            "plate": plate,
-            "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        }
-        self.evidence_records[image_id] = record
-        return record.copy()
+        with self._connect() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO image_evidence (
+                        id,
+                        university_id,
+                        person_id,
+                        session_id,
+                        plate,
+                        minio_bucket,
+                        bucket,
+                        object_path,
+                        object_name,
+                        object_version,
+                        sha256_hash,
+                        hash_sha256,
+                        image_type,
+                        content_type,
+                        encrypted,
+                        expires_at,
+                        status
+                    )
+                    VALUES (
+                        %(image_id)s,
+                        %(university_id)s,
+                        NULL,
+                        %(session_id)s,
+                        %(plate)s,
+                        %(bucket)s,
+                        %(bucket)s,
+                        %(object_name)s,
+                        %(object_name)s,
+                        NULL,
+                        %(hash_sha256)s,
+                        %(hash_sha256)s,
+                        %(image_type)s,
+                        %(content_type)s,
+                        %(encrypted)s,
+                        %(expires_at)s,
+                        %(status)s
+                    )
+                    RETURNING
+                        id AS image_id,
+                        session_id,
+                        plate,
+                        bucket,
+                        object_name,
+                        image_type,
+                        hash_sha256,
+                        encrypted,
+                        created_at,
+                        expires_at,
+                        status
+                    """,
+                    {
+                        "image_id": image_id,
+                        "university_id": UUID(settings.evidence_default_university_id),
+                        "session_id": UUID(session_id) if session_id else None,
+                        "plate": plate,
+                        "bucket": bucket,
+                        "object_name": object_name,
+                        "hash_sha256": hash_sha256,
+                        "image_type": image_type,
+                        "content_type": content_type,
+                        "encrypted": encrypted,
+                        "expires_at": expires_at,
+                        "status": status,
+                    },
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        return self._normalize_row(row)
 
     def link_to_session(self, image_id: str, session_id: str, plate: str) -> dict | None:
-        record = self.evidence_records.get(image_id)
-        if record is None:
-            return None
-        record["session_id"] = session_id
-        record["plate"] = plate
-        self.evidence_records[image_id] = record
-        return record.copy()
+        with self._connect() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    UPDATE image_evidence
+                    SET session_id = %(session_id)s,
+                        plate = %(plate)s
+                    WHERE id = %(image_id)s
+                    RETURNING
+                        id AS image_id,
+                        session_id,
+                        plate,
+                        bucket,
+                        object_name,
+                        image_type,
+                        hash_sha256,
+                        encrypted,
+                        created_at,
+                        expires_at,
+                        status
+                    """,
+                    {
+                        "image_id": UUID(image_id),
+                        "session_id": UUID(session_id),
+                        "plate": plate,
+                    },
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        return None if row is None else self._normalize_row(row)
 
     def get(self, image_id: str) -> dict | None:
-        record = self.evidence_records.get(image_id)
-        return None if record is None else record.copy()
+        with self._connect() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id AS image_id,
+                        session_id,
+                        plate,
+                        bucket,
+                        object_name,
+                        image_type,
+                        hash_sha256,
+                        encrypted,
+                        created_at,
+                        expires_at,
+                        status
+                    FROM image_evidence
+                    WHERE id = %(image_id)s
+                    """,
+                    {"image_id": UUID(image_id)},
+                )
+                row = cursor.fetchone()
+        return None if row is None else self._normalize_row(row)
+
+    def _connect(self):
+        return connect(
+            host=settings.postgres_biometrics_host,
+            port=settings.postgres_biometrics_internal_port,
+            dbname=settings.postgres_biometrics_db,
+            user=settings.postgres_biometrics_user,
+            password=settings.postgres_biometrics_password,
+            connect_timeout=3,
+        )
+
+    def _normalize_row(self, row: dict[str, Any]) -> dict:
+        normalized = dict(row)
+        normalized["image_id"] = str(normalized["image_id"])
+        normalized["session_id"] = str(normalized["session_id"]) if normalized.get("session_id") else None
+        normalized["created_at"] = normalized["created_at"].isoformat().replace("+00:00", "Z")
+        normalized["expires_at"] = (
+            normalized["expires_at"].isoformat().replace("+00:00", "Z")
+            if normalized.get("expires_at")
+            else None
+        )
+        return normalized

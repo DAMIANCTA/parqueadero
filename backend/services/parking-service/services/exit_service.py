@@ -26,6 +26,8 @@ class ExitService:
         self.evidence_service = EvidenceStorageService()
 
     def process_exit(self, payload: ParkingExitRequest) -> ParkingExitResponse:
+        face_mock_id = payload.face_mock_id or payload.face_image_id
+        payload.face_mock_id = face_mock_id
         try:
             normalized_plate = self.plate_repository.normalize_and_validate(
                 plate_text=payload.plate_text,
@@ -65,7 +67,7 @@ class ExitService:
     ) -> ParkingExitResponse:
         face_match = self.face_service.compare_entry_and_exit_faces(
             entry_face_image_id=visitor_session["entry_face_image_id"],
-            exit_face_image_id=payload.face_image_id,
+            exit_face_image_id=payload.face_mock_id or payload.face_image_id,
             confidence_face=payload.confidence_face,
             min_confidence=settings.min_face_confidence,
         )
@@ -97,11 +99,19 @@ class ExitService:
             plate_text=normalized_plate,
             person_type="visitor",
             payment_status=effective_payment_status,
-            exit_face_evidence_id=payload.face_evidence_id,
-            exit_plate_evidence_id=payload.plate_evidence_id,
+            exit_face_evidence_id=payload.face_image_id if payload.face_mock_id else payload.face_evidence_id,
+            exit_plate_evidence_id=payload.plate_image_id or payload.plate_evidence_id,
         )
-        self.evidence_service.link_evidence_to_session(payload.face_evidence_id, session_record["session_id"], normalized_plate)
-        self.evidence_service.link_evidence_to_session(payload.plate_evidence_id, session_record["session_id"], normalized_plate)
+        self.evidence_service.link_evidence_to_session(
+            payload.face_image_id if payload.face_mock_id else payload.face_evidence_id,
+            session_record["session_id"],
+            normalized_plate,
+        )
+        self.evidence_service.link_evidence_to_session(
+            payload.plate_image_id or payload.plate_evidence_id,
+            session_record["session_id"],
+            normalized_plate,
+        )
         return self._authorize_exit(
             payload=payload,
             normalized_plate=normalized_plate,
@@ -114,7 +124,7 @@ class ExitService:
         authorization = self.vehicle_authorization_repository.validate_registered_exit(
             university_id=payload.university_id,
             plate_text=normalized_plate,
-            face_image_id=payload.face_image_id,
+            face_image_id=payload.face_mock_id or payload.face_image_id,
         )
         if not authorization["plate_exists"]:
             return self._reject(
@@ -136,7 +146,7 @@ class ExitService:
             )
 
         face_match = self.face_service.validate_registered_face(
-            face_image_id=payload.face_image_id,
+            face_image_id=payload.face_mock_id or payload.face_image_id,
             confidence_face=payload.confidence_face,
             min_confidence=settings.min_face_confidence,
         )
@@ -150,11 +160,19 @@ class ExitService:
         session_record = self.parking_session_repository.create_registered_exit_record(
             plate_text=normalized_plate,
             person_type=authorization["person_type"],
-            exit_face_evidence_id=payload.face_evidence_id,
-            exit_plate_evidence_id=payload.plate_evidence_id,
+            exit_face_evidence_id=payload.face_image_id if payload.face_mock_id else payload.face_evidence_id,
+            exit_plate_evidence_id=payload.plate_image_id or payload.plate_evidence_id,
         )
-        self.evidence_service.link_evidence_to_session(payload.face_evidence_id, session_record["session_id"], normalized_plate)
-        self.evidence_service.link_evidence_to_session(payload.plate_evidence_id, session_record["session_id"], normalized_plate)
+        self.evidence_service.link_evidence_to_session(
+            payload.face_image_id if payload.face_mock_id else payload.face_evidence_id,
+            session_record["session_id"],
+            normalized_plate,
+        )
+        self.evidence_service.link_evidence_to_session(
+            payload.plate_image_id or payload.plate_evidence_id,
+            session_record["session_id"],
+            normalized_plate,
+        )
         return self._authorize_exit(
             payload=payload,
             normalized_plate=normalized_plate,

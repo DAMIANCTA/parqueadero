@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     iot_service_timeout_seconds: float = 1.5
     payment_service_url: str = "http://payment-service:8000"
     payment_service_timeout_seconds: float = 1.5
+    postgres_biometrics_host: str = "postgres-biometrics"
+    postgres_biometrics_internal_port: int = 5432
+    postgres_biometrics_db: str = "parking_biometrics"
+    postgres_biometrics_user: str = "biometric_user"
+    postgres_biometrics_password: str = "biometric_pass"
     minio_internal_url: str = "http://minio:9000"
     minio_root_user: str = "minioadmin"
     minio_root_password: str = "minioadmin123"
@@ -27,6 +32,7 @@ class Settings(BaseSettings):
     audit_enabled: bool = True
     audit_service_url: str = "http://audit-service:8000"
     audit_internal_key: str = ""
+    evidence_default_university_id: str = "00000000-0000-0000-0000-000000000001"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

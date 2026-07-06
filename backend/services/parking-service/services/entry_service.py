@@ -24,6 +24,9 @@ class EntryService:
         self.evidence_service = EvidenceStorageService()
 
     def process_entry(self, payload: ParkingEntryRequest) -> ParkingEntryResponse:
+        face_mock_id = payload.face_mock_id or payload.face_image_id
+        face_image_id = payload.face_image_id if payload.face_mock_id else payload.face_evidence_id
+        plate_image_id = payload.plate_image_id or payload.plate_evidence_id
         try:
             normalized_plate = self.plate_repository.normalize_and_validate(
                 plate_text=payload.plate_text,
@@ -45,7 +48,7 @@ class EntryService:
             )
 
         face_validation = self.face_service.validate_entry_face(
-            face_image_id=payload.face_image_id,
+            face_image_id=face_mock_id,
             confidence_face=payload.confidence_face,
             min_confidence=settings.min_face_confidence,
         )
@@ -75,18 +78,18 @@ class EntryService:
             gate_id=payload.gate_id,
             plate_text=normalized_plate,
             person_type=payload.person_type,
-            entry_face_image_id=payload.face_image_id,
-            entry_face_evidence_id=payload.face_evidence_id,
-            entry_plate_evidence_id=payload.plate_evidence_id,
+            entry_face_image_id=face_mock_id,
+            entry_face_evidence_id=face_image_id,
+            entry_plate_evidence_id=plate_image_id,
         )
         self.parking_session_repository.attach_evidence(
             session_record["session_id"],
             operation="entry",
-            face_evidence_id=payload.face_evidence_id,
-            plate_evidence_id=payload.plate_evidence_id,
+            face_evidence_id=face_image_id,
+            plate_evidence_id=plate_image_id,
         )
-        self.evidence_service.link_evidence_to_session(payload.face_evidence_id, session_record["session_id"], normalized_plate)
-        self.evidence_service.link_evidence_to_session(payload.plate_evidence_id, session_record["session_id"], normalized_plate)
+        self.evidence_service.link_evidence_to_session(face_image_id, session_record["session_id"], normalized_plate)
+        self.evidence_service.link_evidence_to_session(plate_image_id, session_record["session_id"], normalized_plate)
         if payload.person_type == "visitor":
             self.payment_repository.sync_visitor_session(
                 session_id=session_record["session_id"],

@@ -28,6 +28,8 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
   double _plateConfidence = 0.95;
   double _faceConfidence = 0.95;
   bool _submitting = false;
+  bool _uploadingFaceEvidence = false;
+  bool _uploadingPlateEvidence = false;
   PaymentByPlateResult? _paymentResult;
   LocalEvidenceDraft? _faceEvidence;
   LocalEvidenceDraft? _plateEvidence;
@@ -72,9 +74,9 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
         campusId: selection.campusId,
         gateId: selection.gateId,
         plateText: normalizedPlate,
-        faceImageId: _buildFaceImageId(normalizedPlate),
-        faceEvidenceId: faceEvidence.imageId,
-        plateEvidenceId: plateEvidence.imageId,
+        faceImageId: faceEvidence.imageId,
+        plateImageId: plateEvidence.imageId,
+        faceMockId: _buildFaceImageId(normalizedPlate),
         livenessScore: _livenessValid ? 0.95 : 0.30,
         confidencePlate: _plateConfidence,
         confidenceFace: _faceValid ? _faceConfidence : 0.35,
@@ -186,27 +188,7 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
     if (existing != null && existing.plate == plate) {
       return existing;
     }
-
-    final draft = isFace
-        ? (_faceEvidence ?? _buildDefaultMockEvidence(isFace: true, plate: plate))
-        : (_plateEvidence ?? _buildDefaultMockEvidence(isFace: false, plate: plate));
-    final result = await _apiClient.uploadEvidence(
-      imageType: imageType,
-      plate: plate,
-      evidence: draft,
-    );
-    if (mounted) {
-      setState(() {
-        if (isFace) {
-          _faceEvidence = draft;
-          _uploadedFaceEvidence = result;
-        } else {
-          _plateEvidence = draft;
-          _uploadedPlateEvidence = result;
-        }
-      });
-    }
-    return result;
+    return _uploadEvidenceManually(isFace: isFace, imageType: imageType, plate: plate);
   }
 
   LocalEvidenceDraft _buildDefaultMockEvidence({required bool isFace, required String plate}) {
@@ -218,6 +200,58 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
       contentType: 'text/plain',
       isMock: true,
     );
+  }
+
+  Future<EvidenceUploadResult> _uploadEvidenceManually({
+    required bool isFace,
+    required EvidenceImageType imageType,
+    required String plate,
+  }) async {
+    final normalizedPlate = plate.trim().toUpperCase();
+    if (normalizedPlate.isEmpty) {
+      throw Exception('Ingresa la placa antes de subir evidencias.');
+    }
+
+    final draft = isFace
+        ? (_faceEvidence ?? _buildDefaultMockEvidence(isFace: true, plate: normalizedPlate))
+        : (_plateEvidence ?? _buildDefaultMockEvidence(isFace: false, plate: normalizedPlate));
+
+    setState(() {
+      if (isFace) {
+        _uploadingFaceEvidence = true;
+      } else {
+        _uploadingPlateEvidence = true;
+      }
+    });
+    try {
+      final result = await _apiClient.uploadEvidence(
+        imageType: imageType,
+        plate: normalizedPlate,
+        evidence: draft,
+      );
+      if (mounted) {
+        setState(() {
+          if (isFace) {
+            _faceEvidence = draft;
+            _uploadedFaceEvidence = result;
+          } else {
+            _plateEvidence = draft;
+            _uploadedPlateEvidence = result;
+          }
+        });
+      }
+      return result;
+    } finally {
+      if (mounted) {
+        setState(() {
+          if (isFace) {
+            _uploadingFaceEvidence = false;
+          } else {
+            _uploadingPlateEvidence = false;
+          }
+        });
+      }
+    }
   }
 
   String _buildFaceImageId(String plate) {
@@ -242,8 +276,10 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
     required String title,
     required LocalEvidenceDraft? draft,
     required EvidenceUploadResult? uploaded,
+    required bool uploading,
     required VoidCallback onUseMock,
     required VoidCallback onPickGallery,
+    required VoidCallback onUpload,
     VoidCallback? onCapture,
   }) {
     return Container(
@@ -284,6 +320,13 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
                 icon: const Icon(Icons.auto_fix_high_outlined),
                 label: const Text('Usar mock'),
               ),
+              FilledButton.icon(
+                onPressed: uploading ? null : onUpload,
+                icon: uploading
+                    ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.cloud_upload_outlined),
+                label: Text(uploading ? 'Subiendo' : 'Subir'),
+              ),
             ],
           ),
         ],
@@ -318,8 +361,23 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
             title: 'Evidencia de rostro',
             draft: _faceEvidence,
             uploaded: _uploadedFaceEvidence,
+            uploading: _uploadingFaceEvidence,
             onUseMock: () => _useMockEvidence(isFace: true),
             onPickGallery: () => _pickEvidence(isFace: true, source: ImageSource.gallery),
+            onUpload: () async {
+              try {
+                await _uploadEvidenceManually(
+                  isFace: true,
+                  imageType: EvidenceImageType.faceExit,
+                  plate: _plateController.text,
+                );
+              } catch (error) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+                );
+              }
+            },
             onCapture: _supportsCameraCapture ? () => _pickEvidence(isFace: true, source: ImageSource.camera) : null,
           ),
           const SizedBox(height: 12),
@@ -327,8 +385,23 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
             title: 'Evidencia de placa',
             draft: _plateEvidence,
             uploaded: _uploadedPlateEvidence,
+            uploading: _uploadingPlateEvidence,
             onUseMock: () => _useMockEvidence(isFace: false),
             onPickGallery: () => _pickEvidence(isFace: false, source: ImageSource.gallery),
+            onUpload: () async {
+              try {
+                await _uploadEvidenceManually(
+                  isFace: false,
+                  imageType: EvidenceImageType.plateExit,
+                  plate: _plateController.text,
+                );
+              } catch (error) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+                );
+              }
+            },
             onCapture: _supportsCameraCapture ? () => _pickEvidence(isFace: false, source: ImageSource.camera) : null,
           ),
           const SizedBox(height: 12),

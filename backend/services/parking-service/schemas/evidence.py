@@ -13,4 +13,8 @@ class EvidenceUploadResponse(BaseModel):
     image_type: ImageType
     session_id: str | None = None
     plate: str = Field(min_length=3, max_length=20)
+    hash_sha256: str
+    encrypted: bool
     created_at: str
+    expires_at: str | None = None
+    status: str
