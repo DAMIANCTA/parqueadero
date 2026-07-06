@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 
 from config import settings
-from security import AuditLogMiddleware, AuthenticationMiddleware, RateLimitMiddleware
+from routes.integration import router as integration_router
 from routes.system import router
+from security import AuditLogMiddleware, AuthenticationMiddleware, RateLimitMiddleware
 
 
 app = FastAPI(title=settings.service_name, version=settings.service_version)
@@ -19,7 +20,7 @@ app.add_middleware(
     secret_key=settings.jwt_secret_key,
     issuer=settings.jwt_issuer,
     audience=settings.jwt_audience,
-    public_paths={"/health", "/version"},
+    public_paths={"/health", "/version", "/parking/entry", "/parking/exit", "/demo/open-gate"},
 )
 app.add_middleware(
     RateLimitMiddleware,
@@ -28,3 +29,4 @@ app.add_middleware(
     excluded_paths={"/health", "/version"},
 )
 app.include_router(router)
+app.include_router(integration_router)

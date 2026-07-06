@@ -112,6 +112,28 @@ class AuthorizationResult {
   final ResultSessionSummary? session;
 }
 
+class DemoGateResult {
+  const DemoGateResult({
+    required this.status,
+    required this.message,
+    required this.demoEventId,
+    required this.topic,
+    required this.statusTopic,
+    required this.command,
+    required this.published,
+    required this.payload,
+  });
+
+  final String status;
+  final String message;
+  final String demoEventId;
+  final String topic;
+  final String statusTopic;
+  final String command;
+  final bool published;
+  final Map<String, dynamic> payload;
+}
+
 class LivenessFrame {
   const LivenessFrame({
     required this.frameId,

@@ -15,6 +15,35 @@ class ApiClient {
     return response.statusCode == 200;
   }
 
+  Future<DemoGateResult> openDemoGate() async {
+    final response = await _client.post(
+      Uri.parse('${AppConfig.apiBaseUrl}/demo/open-gate'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'university_id': 'uce',
+        'campus_id': 'matriz',
+        'gate_id': 'norte',
+        'plate': 'ABC1234',
+      }),
+    );
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode >= 400) {
+      throw Exception(body['detail'] ?? 'No se pudo abrir la barrera demo.');
+    }
+
+    return DemoGateResult(
+      status: body['status'] as String? ?? 'UNKNOWN',
+      message: body['message'] as String? ?? 'Sin mensaje',
+      demoEventId: body['demo_event_id'] as String? ?? 'n/a',
+      topic: body['topic'] as String? ?? 'n/a',
+      statusTopic: body['status_topic'] as String? ?? 'n/a',
+      command: body['command'] as String? ?? 'open',
+      published: body['published'] as bool? ?? false,
+      payload: Map<String, dynamic>.from(body['payload'] as Map? ?? const {}),
+    );
+  }
+
   Future<AuthorizationResult> submitEntry({
     required String universityId,
     required String campusId,

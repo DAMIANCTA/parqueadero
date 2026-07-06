@@ -12,24 +12,27 @@ Base Flutter mobile-first para operacion en puertas de acceso.
 6. Captura de placa
 7. Resultado de autorizacion
 8. Historial basico
+9. Demo IoT
 
 ## Integraciones actuales
 
 - `GET /health`
 - `POST /parking/entry`
 - `POST /parking/exit`
+- `POST /demo/open-gate`
 
 ## Configuracion de API
 
 La URL base se configura con `dart-define`:
 
 ```powershell
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8004
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 ```
 
 Valor por defecto:
 
-- Android emulator: `http://10.0.2.2:8004`
+- Android emulator: `http://10.0.2.2:8000`
+- Windows local: `http://localhost:8000`
 
 ## Seguridad actual
 
@@ -39,4 +42,4 @@ Valor por defecto:
 
 ## Nota
 
-Este repositorio no incluye los directorios de plataforma generados por `flutter create` porque el SDK Flutter no esta disponible en este entorno. El codigo fuente de la app y su estructura quedan preparados para integrarlos en cuanto se genere el proyecto de plataforma.
+La app ya puede ejecutarse en Windows y en Android apuntando al `api-gateway`. Para pruebas locales se recomienda usar el comando documentado en [docs/testing-local.md](C:\Users\damia\OneDrive\Documentos\parqueadero\docs\testing-local.md).

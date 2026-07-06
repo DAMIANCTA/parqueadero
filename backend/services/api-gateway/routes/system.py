@@ -3,20 +3,25 @@ from fastapi import APIRouter
 from config import settings
 from schemas.system import HealthResponse, MockResponse, VersionResponse
 from security import require_permissions
+from services.integration_service import IntegrationService
 from services.mock_service import MockService
 
 
 router = APIRouter()
 mock_service = MockService()
+integration_service = IntegrationService()
 
 
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
+    checks = integration_service.collect_health()
+    overall_status = "ok" if all(check.status == "ok" for check in checks) else "degraded"
     return HealthResponse(
         service=settings.service_name,
-        status="ok",
+        status=overall_status,
         version=settings.service_version,
         environment=settings.environment,
+        checks=checks,
     )
 
 

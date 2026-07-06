@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../state/parking_app_scope.dart';
+import 'demo_iot_screen.dart';
 import 'entry_mode_screen.dart';
 import 'exit_mode_screen.dart';
 import 'history_screen.dart';
@@ -64,6 +65,12 @@ class ModeHubScreen extends StatelessWidget {
               onPressed: () => Navigator.of(context).pushNamed(HistoryScreen.routeName),
               icon: const Icon(Icons.history),
               label: const Text('Historial basico'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).pushNamed(DemoIotScreen.routeName),
+              icon: const Icon(Icons.hub),
+              label: const Text('Demo IoT'),
             ),
             const SizedBox(height: 12),
             TextButton(

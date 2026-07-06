@@ -1,0 +1,190 @@
+import socket
+import uuid
+from dataclasses import dataclass
+
+import httpx
+from psycopg import connect
+
+from config import settings
+from schemas.integration import DemoOpenGateRequest, ParkingEntryRequest, ParkingExitRequest
+from schemas.system import DependencyHealth
+from security import encode_access_token
+
+
+@dataclass
+class DownstreamTarget:
+    name: str
+    base_url: str
+
+
+class IntegrationService:
+    def __init__(self) -> None:
+        self.http_timeout = 2.0
+        self.targets = {
+            "parking": DownstreamTarget(name="parking-service", base_url=settings.parking_service_url.rstrip("/")),
+            "face": DownstreamTarget(name="face-service", base_url=settings.face_service_url.rstrip("/")),
+            "plate": DownstreamTarget(name="plate-service", base_url=settings.plate_service_url.rstrip("/")),
+            "payment": DownstreamTarget(name="payment-service", base_url=settings.payment_service_url.rstrip("/")),
+            "iot": DownstreamTarget(name="iot-service", base_url=settings.iot_service_url.rstrip("/")),
+        }
+
+    def collect_health(self) -> list[DependencyHealth]:
+        return [
+            self._check_http_service("parking-service", settings.parking_service_url),
+            self._check_http_service("face-service", settings.face_service_url),
+            self._check_http_service("plate-service", settings.plate_service_url),
+            self._check_http_service("payment-service", settings.payment_service_url),
+            self._check_http_service("iot-service", settings.iot_service_url),
+            self._check_postgres(
+                name="postgres-core",
+                host=settings.postgres_core_host,
+                port=settings.postgres_core_internal_port,
+                dbname=settings.postgres_core_db,
+                user=settings.postgres_core_user,
+                password=settings.postgres_core_password,
+            ),
+            self._check_postgres(
+                name="postgres-biometrics",
+                host=settings.postgres_biometrics_host,
+                port=settings.postgres_biometrics_internal_port,
+                dbname=settings.postgres_biometrics_db,
+                user=settings.postgres_biometrics_user,
+                password=settings.postgres_biometrics_password,
+            ),
+            self._check_minio(),
+            self._check_mqtt(),
+        ]
+
+    def proxy_entry(self, payload: ParkingEntryRequest) -> dict:
+        return self._post_json(
+            self.targets["parking"],
+            "/parking/entry",
+            payload.model_dump(),
+            permissions=["parking.entry"],
+        )
+
+    def proxy_exit(self, payload: ParkingExitRequest) -> dict:
+        return self._post_json(
+            self.targets["parking"],
+            "/parking/exit",
+            payload.model_dump(),
+            permissions=["parking.exit"],
+        )
+
+    def open_demo_gate(self, payload: DemoOpenGateRequest) -> dict:
+        demo_event_id = f"demo-{uuid.uuid4()}"
+        downstream = self._post_json(
+            self.targets["iot"],
+            "/api/v1/gates/open",
+            {
+                "university_id": payload.university_id,
+                "campus_id": payload.campus_id,
+                "gate_id": payload.gate_id,
+                "plate": payload.plate,
+                "session_id": demo_event_id,
+                "reason": "demo_validated",
+                "command": "open",
+            },
+            permissions=["iot.gates.open"],
+        )
+        return {
+            "status": "OPEN_COMMAND_SENT",
+            "message": "La barrera demo fue enviada a abrir.",
+            "demo_event_id": demo_event_id,
+            "topic": downstream["topic"],
+            "status_topic": downstream["status_topic"],
+            "command": downstream["command"],
+            "published": downstream["published"],
+            "payload": downstream["payload"],
+        }
+
+    def _check_http_service(self, name: str, base_url: str) -> DependencyHealth:
+        try:
+            with httpx.Client(timeout=self.http_timeout) as client:
+                response = client.get(f"{base_url.rstrip('/')}/health")
+            if response.status_code == 200:
+                return DependencyHealth(name=name, status="ok", detail="HTTP health responded with 200")
+            return DependencyHealth(name=name, status="error", detail=f"HTTP health returned {response.status_code}")
+        except httpx.HTTPError as exc:
+            return DependencyHealth(name=name, status="error", detail=f"HTTP health failed: {exc}")
+
+    def _check_postgres(
+        self,
+        *,
+        name: str,
+        host: str,
+        port: int,
+        dbname: str,
+        user: str,
+        password: str,
+    ) -> DependencyHealth:
+        try:
+            connection = connect(
+                host=host,
+                port=port,
+                dbname=dbname,
+                user=user,
+                password=password,
+                connect_timeout=2,
+            )
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+            connection.close()
+            return DependencyHealth(name=name, status="ok", detail="Database connection and SELECT 1 succeeded")
+        except Exception as exc:  # pragma: no cover - defensive runtime integration
+            return DependencyHealth(name=name, status="error", detail=f"Database check failed: {exc}")
+
+    def _check_minio(self) -> DependencyHealth:
+        try:
+            with httpx.Client(timeout=self.http_timeout) as client:
+                response = client.get(f"{settings.minio_internal_url.rstrip('/')}/minio/health/live")
+            if response.status_code == 200:
+                return DependencyHealth(name="minio", status="ok", detail="MinIO live health responded with 200")
+            return DependencyHealth(name="minio", status="error", detail=f"MinIO health returned {response.status_code}")
+        except httpx.HTTPError as exc:
+            return DependencyHealth(name="minio", status="error", detail=f"MinIO health failed: {exc}")
+
+    def _check_mqtt(self) -> DependencyHealth:
+        try:
+            with socket.create_connection((settings.mqtt_host, settings.mqtt_port), timeout=2):
+                pass
+            return DependencyHealth(name="mqtt", status="ok", detail="TCP connection to broker succeeded")
+        except OSError as exc:
+            return DependencyHealth(name="mqtt", status="error", detail=f"MQTT connection failed: {exc}")
+
+    def _post_json(
+        self,
+        target: DownstreamTarget,
+        path: str,
+        payload: dict,
+        *,
+        permissions: list[str],
+    ) -> dict:
+        token = self._build_internal_token(permissions)
+        with httpx.Client(timeout=5.0) as client:
+            response = client.post(
+                f"{target.base_url}{path}",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+            )
+        response.raise_for_status()
+        return response.json()
+
+    def _build_internal_token(self, permissions: list[str]) -> str:
+        return encode_access_token(
+            secret_key=settings.jwt_secret_key,
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+            expires_minutes=settings.jwt_access_token_expires_minutes,
+            claims={
+                "sub": "api-gateway",
+                "username": "api-gateway",
+                "roles": ["service_gateway"],
+                "permissions": permissions + ["*"],
+                "university_id": "system",
+            },
+        )

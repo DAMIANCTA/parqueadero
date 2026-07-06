@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'screens/demo_iot_screen.dart';
 import 'screens/entry_mode_screen.dart';
 import 'screens/exit_mode_screen.dart';
 import 'screens/history_screen.dart';
@@ -36,6 +37,7 @@ class _SmartParkingAppState extends State<SmartParkingApp> {
           LoginScreen.routeName: (_) => const LoginScreen(),
           SetupScreen.routeName: (_) => const SetupScreen(),
           ModeHubScreen.routeName: (_) => const ModeHubScreen(),
+          DemoIotScreen.routeName: (_) => const DemoIotScreen(),
           EntryModeScreen.routeName: (_) => const EntryModeScreen(),
           ExitModeScreen.routeName: (_) => const ExitModeScreen(),
           HistoryScreen.routeName: (_) => const HistoryScreen(),

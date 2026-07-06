@@ -8,8 +8,26 @@ paths:
       summary: Health check
       responses:
         "200":
-          description: Service healthy
-  /api/v1/catalog:
+          description: Aggregated gateway and dependency health
+  /parking/entry:
+    post:
+      summary: Proxy vehicle entry through the gateway
+      responses:
+        "200":
+          description: Entry processed
+  /parking/exit:
+    post:
+      summary: Proxy vehicle exit through the gateway
+      responses:
+        "200":
+          description: Exit processed
+  /demo/open-gate:
+    post:
+      summary: Publish a demo gate-open command through IoT
+      responses:
+        "200":
+          description: Demo gate open published
+  /api/v1/mock:
     get:
       summary: Available internal services
       responses:
