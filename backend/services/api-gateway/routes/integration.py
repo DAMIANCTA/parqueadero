@@ -6,6 +6,8 @@ from schemas.integration import (
     DemoOpenGateResponse,
     EvidenceUploadResponse,
     ParkingAuthorizationResponse,
+    PlateDetectBatchRequest,
+    PlateDetectBatchResponse,
     PlateDetectRequest,
     PlateDetectResponse,
     ParkingEntryRequest,
@@ -96,3 +98,14 @@ def detect_plate(payload: PlateDetectRequest) -> PlateDetectResponse:
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Plate service unavailable: {exc}") from exc
     return PlateDetectResponse(**response)
+
+
+@router.post("/plates/detect-batch", response_model=PlateDetectBatchResponse)
+def detect_plate_batch(payload: PlateDetectBatchRequest) -> PlateDetectBatchResponse:
+    try:
+        response = integration_service.proxy_plate_detection_batch(payload)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Plate service unavailable: {exc}") from exc
+    return PlateDetectBatchResponse(**response)

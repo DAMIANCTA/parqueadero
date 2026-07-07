@@ -36,15 +36,18 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
   bool _uploadingFaceEvidence = false;
   bool _processingPlateEvidence = false;
   LocalEvidenceDraft? _faceEvidence;
-  LocalEvidenceDraft? _plateEvidence;
+  List<LocalEvidenceDraft> _plateEvidences = const [];
   EvidenceUploadResult? _uploadedFaceEvidence;
-  EvidenceUploadResult? _uploadedPlateEvidence;
+  List<EvidenceUploadResult> _uploadedPlateEvidences = const [];
+  PlateBatchDetectionResult? _plateBatchDetection;
   PlateDetectionResult? _plateDetection;
 
   bool get _supportsCameraCapture =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
+
+  bool get _supportsMultiGallery => !kIsWeb;
 
   bool get _isSecurityOperator => ParkingAppScope.of(context).isSecurityOperator;
 
@@ -77,6 +80,38 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
 
   double get _effectivePlateConfidence => _usingManualOverride ? 1.0 : (_plateDetection?.confidence ?? 0.0);
 
+  EvidenceUploadResult? get _selectedPlateEvidence {
+    if (_uploadedPlateEvidences.isEmpty) {
+      return null;
+    }
+    final detectedPlate = _plateDetection?.plateText;
+    final batch = _plateBatchDetection;
+    if (detectedPlate == null || batch == null) {
+      return _uploadedPlateEvidences.first;
+    }
+
+    PlateBatchResultItem? bestMatch;
+    for (final result in batch.results) {
+      if (result.plateText != detectedPlate) {
+        continue;
+      }
+      if (bestMatch == null || result.confidence > bestMatch.confidence) {
+        bestMatch = result;
+      }
+    }
+
+    if (bestMatch == null) {
+      return _uploadedPlateEvidences.first;
+    }
+
+    for (final upload in _uploadedPlateEvidences) {
+      if (upload.imageId == bestMatch.imageId) {
+        return upload;
+      }
+    }
+    return _uploadedPlateEvidences.first;
+  }
+
   @override
   void dispose() {
     _plateController.dispose();
@@ -107,7 +142,7 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
         imageType: EvidenceImageType.faceEntry,
         plate: effectivePlate,
       );
-      final plateEvidence = _uploadedPlateEvidence;
+      final plateEvidence = _selectedPlateEvidence;
       if (plateEvidence == null) {
         throw Exception('No hay evidencia de placa cargada.');
       }
@@ -153,6 +188,11 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
   }
 
   Future<void> _pickEvidence({required bool isFace, required ImageSource source}) async {
+    if (!isFace) {
+      await _collectPlateEvidences(source: source);
+      return;
+    }
+
     try {
       final file = await _picker.pickImage(source: source, imageQuality: 85);
       if (file == null) {
@@ -166,10 +206,7 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
         contentType: 'image/jpeg',
         isMock: false,
       );
-      _setEvidenceDraft(isFace: isFace, draft: draft);
-      if (!isFace) {
-        await _uploadAndDetectPlate();
-      }
+      _setEvidenceDraft(isFace: true, draft: draft);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -179,11 +216,18 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
   }
 
   Future<void> _useMockEvidence({required bool isFace}) async {
+    if (!isFace) {
+      final drafts = List<LocalEvidenceDraft>.generate(
+        3,
+        (index) => _buildDefaultMockEvidence(isFace: false, suffix: '-${index + 1}'),
+      );
+      _setPlateEvidenceDrafts(drafts);
+      await _uploadAndDetectPlateBatch();
+      return;
+    }
+
     final draft = _buildDefaultMockEvidence(isFace: isFace);
     _setEvidenceDraft(isFace: isFace, draft: draft);
-    if (!isFace) {
-      await _uploadAndDetectPlate();
-    }
   }
 
   void _setEvidenceDraft({required bool isFace, required LocalEvidenceDraft draft}) {
@@ -191,14 +235,19 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
       if (isFace) {
         _faceEvidence = draft;
         _uploadedFaceEvidence = null;
-      } else {
-        _plateEvidence = draft;
-        _uploadedPlateEvidence = null;
-        _plateDetection = null;
-        _plateController.clear();
-        _manualPlateController.clear();
-        _overrideReasonController.clear();
       }
+    });
+  }
+
+  void _setPlateEvidenceDrafts(List<LocalEvidenceDraft> drafts) {
+    setState(() {
+      _plateEvidences = List<LocalEvidenceDraft>.from(drafts.take(3));
+      _uploadedPlateEvidences = const [];
+      _plateBatchDetection = null;
+      _plateDetection = null;
+      _plateController.clear();
+      _manualPlateController.clear();
+      _overrideReasonController.clear();
     });
   }
 
@@ -235,7 +284,58 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     }
   }
 
-  Future<void> _uploadAndDetectPlate() async {
+  Future<void> _collectPlateEvidences({required ImageSource source}) async {
+    try {
+      final drafts = <LocalEvidenceDraft>[];
+      if (source == ImageSource.gallery && _supportsMultiGallery) {
+        final files = await _picker.pickMultiImage(imageQuality: 85);
+        if (files.isEmpty) {
+          return;
+        }
+        for (final file in files.take(3)) {
+          drafts.add(
+            LocalEvidenceDraft(
+              label: 'Seleccionada',
+              fileName: file.name,
+              bytes: await file.readAsBytes(),
+              contentType: 'image/jpeg',
+              isMock: false,
+            ),
+          );
+        }
+      } else {
+        for (var index = 0; index < 3; index++) {
+          final file = await _picker.pickImage(source: source, imageQuality: 85);
+          if (file == null) {
+            break;
+          }
+          drafts.add(
+            LocalEvidenceDraft(
+              label: source == ImageSource.camera ? 'Capturada ${index + 1}' : 'Seleccionada ${index + 1}',
+              fileName: file.name,
+              bytes: await file.readAsBytes(),
+              contentType: 'image/jpeg',
+              isMock: false,
+            ),
+          );
+        }
+      }
+
+      if (drafts.isEmpty) {
+        return;
+      }
+
+      _setPlateEvidenceDrafts(drafts);
+      await _uploadAndDetectPlateBatch();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudieron obtener las capturas de placa.')),
+      );
+    }
+  }
+
+  Future<void> _uploadAndDetectPlateBatch() async {
     final selection = ParkingAppScope.of(context).selection;
     if (selection == null) {
       if (!mounted) return;
@@ -245,27 +345,39 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
       return;
     }
 
-    final draft = _plateEvidence ?? _buildDefaultMockEvidence(isFace: false);
+    final drafts = _plateEvidences.isNotEmpty ? _plateEvidences : List<LocalEvidenceDraft>.generate(3, (index) => _buildDefaultMockEvidence(isFace: false, suffix: '-${index + 1}'));
     setState(() => _processingPlateEvidence = true);
     try {
-      final upload = await _apiClient.uploadEvidence(
-        imageType: EvidenceImageType.plateEntry,
-        plate: _pendingPlatePlaceholder,
-        evidence: draft,
-      );
-      final detection = await _apiClient.detectPlate(
-        imageId: upload.imageId,
+      final uploads = <EvidenceUploadResult>[];
+      for (final draft in drafts) {
+        final upload = await _apiClient.uploadEvidence(
+          imageType: EvidenceImageType.plateEntry,
+          plate: _pendingPlatePlaceholder,
+          evidence: draft,
+        );
+        uploads.add(upload);
+      }
+
+      final batchDetection = await _apiClient.detectPlateBatch(
+        imageIds: uploads.map((item) => item.imageId).toList(),
         universityId: selection.universityId,
         campusId: selection.campusId,
         gateId: selection.gateId,
       );
+      final detection = batchDetection.toPrimaryDetection();
       if (!mounted) return;
       setState(() {
-        _uploadedPlateEvidence = upload;
+        _plateEvidences = drafts;
+        _uploadedPlateEvidences = uploads;
+        _plateBatchDetection = batchDetection;
         _plateDetection = detection;
         _plateController.text = detection.plateText ?? '';
       });
-      if (!detection.autoAccepted) {
+      if (batchDetection.inconsistent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Resultado inconsistente entre capturas.')),
+        );
+      } else if (!detection.autoAccepted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('La deteccion de placa no tiene confianza suficiente.')),
         );
@@ -273,7 +385,8 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _uploadedPlateEvidence = null;
+        _uploadedPlateEvidences = const [];
+        _plateBatchDetection = null;
         _plateDetection = null;
         _plateController.clear();
       });
@@ -287,13 +400,13 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     }
   }
 
-  LocalEvidenceDraft _buildDefaultMockEvidence({required bool isFace}) {
+  LocalEvidenceDraft _buildDefaultMockEvidence({required bool isFace, String suffix = ''}) {
     final mockPlate = isFace ? (_effectivePlateText.isEmpty ? _recommendedMockPlate() : _effectivePlateText) : _recommendedMockPlate();
     final slot = isFace ? 'face-entry' : 'plate-entry';
     return LocalEvidenceDraft(
       label: isFace ? 'Mock automatico rostro' : 'Mock automatico placa',
-      fileName: '$slot-$mockPlate.txt',
-      bytes: Uint8List.fromList(utf8.encode('mock:$slot:$mockPlate')),
+      fileName: '$slot-$mockPlate$suffix.txt',
+      bytes: Uint8List.fromList(utf8.encode('mock:$slot:$mockPlate$suffix')),
       contentType: 'text/plain',
       isMock: true,
     );
@@ -417,10 +530,14 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Text(_plateEvidence == null ? 'Sin evidencia seleccionada.' : '${_plateEvidence!.label} - ${_plateEvidence!.fileName}'),
-          if (_uploadedPlateEvidence != null) ...[
+          Text(
+            _plateEvidences.isEmpty
+                ? 'Sin evidencias seleccionadas.'
+                : '${_plateEvidences.length} capturas listas para procesar.',
+          ),
+          if (_uploadedPlateEvidences.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text('Image ID: ${_uploadedPlateEvidence!.imageId}'),
+            Text('Imagenes subidas: ${_uploadedPlateEvidences.length}/3'),
           ],
           const SizedBox(height: 12),
           Wrap(
@@ -430,22 +547,22 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
               OutlinedButton.icon(
                 onPressed: _processingPlateEvidence ? null : () => _pickEvidence(isFace: false, source: ImageSource.gallery),
                 icon: const Icon(Icons.photo_library_outlined),
-                label: const Text('Seleccionar placa'),
+                label: const Text('Seleccionar 3 imagenes'),
               ),
               if (_supportsCameraCapture)
                 FilledButton.icon(
                   onPressed: _processingPlateEvidence ? null : () => _pickEvidence(isFace: false, source: ImageSource.camera),
                   icon: const Icon(Icons.photo_camera_outlined),
-                  label: const Text('Capturar placa'),
+                  label: const Text('Capturar 3 placas'),
                 ),
               OutlinedButton.icon(
                 onPressed: _processingPlateEvidence ? null : () => _useMockEvidence(isFace: false),
                 icon: const Icon(Icons.auto_fix_high_outlined),
                 label: const Text('Usar mock'),
               ),
-              if (_plateEvidence != null)
+              if (_plateEvidences.isNotEmpty)
                 OutlinedButton.icon(
-                  onPressed: _processingPlateEvidence ? null : _uploadAndDetectPlate,
+                  onPressed: _processingPlateEvidence ? null : _uploadAndDetectPlateBatch,
                   icon: const Icon(Icons.refresh),
                   label: const Text('Reintentar captura'),
                 ),
@@ -485,6 +602,16 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
                   Text('Confianza: ${(_plateDetection!.confidence * 100).toStringAsFixed(0)}%'),
                   Text('Proveedor detector: ${_plateDetection!.detectorProvider}'),
                   Text('Proveedor OCR: ${_plateDetection!.ocrProvider}'),
+                  if (_plateBatchDetection != null) ...[
+                    const SizedBox(height: 8),
+                    Text('Resultados por captura:', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 4),
+                    ..._plateBatchDetection!.results.map(
+                      (result) => Text(
+                        '${result.imageId}: ${result.plateText ?? 'sin lectura'} - ${(result.confidence * 100).toStringAsFixed(0)}% (${result.status})',
+                      ),
+                    ),
+                  ],
                   if (_plateDetection!.warnings.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text('Advertencias:', style: Theme.of(context).textTheme.titleSmall),

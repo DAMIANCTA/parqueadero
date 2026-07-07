@@ -12,7 +12,14 @@ from services.mock_plate_ocr import MockPlateOcr
 from services.ocr_reader import OCRReaderService
 from services.plate_cropper import PlateCropper
 from services.plate_detector_yolo import YoloPlateDetectorService
-from services.plate_models import DetectionCandidate, OcrCandidate, PlateDetectionOutcome, PlateImage, PlateTextCandidate
+from services.plate_models import (
+    DetectionCandidate,
+    OcrCandidate,
+    PlateBatchDetectionOutcome,
+    PlateDetectionOutcome,
+    PlateImage,
+    PlateTextCandidate,
+)
 from services.plate_normalizer import PlateNormalizer
 from services.plate_format_validator import PlateFormatValidator
 from services.plate_preprocessor import PlatePreprocessor
@@ -164,6 +171,74 @@ class PlateService:
         self._log_outcome(image, outcome, quality_score=quality.quality_score)
         return outcome
 
+    def detect_plate_batch(
+        self,
+        *,
+        image_ids: list[str],
+        country_code: str | None = None,
+    ) -> PlateBatchDetectionOutcome:
+        logger.info("plate_detect_batch start image_ids=%s", image_ids)
+        results = [
+            self.detect_plate(
+                image_id=image_id,
+                country_code=country_code,
+            )
+            for image_id in image_ids
+        ]
+
+        valid_results = [
+            result for result in results if result.plate_text and result.valid_format and result.status != "NOT_DETECTED"
+        ]
+        warnings = self._collect_batch_warnings(results)
+        if not valid_results:
+            warnings.append("BATCH_NOT_DETECTED")
+            outcome = PlateBatchDetectionOutcome(
+                status="NOT_DETECTED",
+                plate_text=None,
+                confidence=0.0,
+                results=results,
+                warnings=self._unique(warnings),
+            )
+            logger.info("plate_detect_batch end status=%s plate_text=%s confidence=%.4f warnings=%s", outcome.status, outcome.plate_text, outcome.confidence, outcome.warnings)
+            return outcome
+
+        grouped: dict[str, list[PlateDetectionOutcome]] = {}
+        for result in valid_results:
+            grouped.setdefault(result.plate_text or "", []).append(result)
+
+        ranked_groups = sorted(
+            grouped.items(),
+            key=lambda item: (
+                len(item[1]),
+                max(candidate.confidence for candidate in item[1]),
+                sum(candidate.confidence for candidate in item[1]) / len(item[1]),
+            ),
+            reverse=True,
+        )
+        winning_plate, winning_results = ranked_groups[0]
+        final_confidence = round(max(result.confidence for result in winning_results), 4)
+
+        if len(grouped) > 1:
+            warnings.append("INCONSISTENT_RESULT")
+
+        status = "DETECTED" if final_confidence >= settings.plate_auto_accept_confidence else "LOW_CONFIDENCE"
+        outcome = PlateBatchDetectionOutcome(
+            status=status,
+            plate_text=winning_plate,
+            confidence=final_confidence,
+            results=results,
+            warnings=self._unique(warnings),
+        )
+        logger.info(
+            "plate_detect_batch end status=%s plate_text=%s confidence=%.4f warnings=%s grouped=%s",
+            outcome.status,
+            outcome.plate_text,
+            outcome.confidence,
+            outcome.warnings,
+            {plate: len(items) for plate, items in grouped.items()},
+        )
+        return outcome
+
     def _load_image(
         self,
         *,
@@ -253,6 +328,22 @@ class PlateService:
         if confidence < settings.plate_auto_accept_confidence:
             return "LOW_CONFIDENCE"
         return "DETECTED"
+
+    def _collect_batch_warnings(self, results: list[PlateDetectionOutcome]) -> list[str]:
+        warnings: list[str] = []
+        for result in results:
+            warnings.extend(result.warnings)
+        return self._unique(warnings)
+
+    def _unique(self, items: list[str]) -> list[str]:
+        seen: set[str] = set()
+        unique_items: list[str] = []
+        for item in items:
+            if item in seen:
+                continue
+            seen.add(item)
+            unique_items.append(item)
+        return unique_items
 
     def _decode_bgr(self, image_bytes: bytes):
         try:

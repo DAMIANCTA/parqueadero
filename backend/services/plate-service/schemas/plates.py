@@ -15,6 +15,14 @@ class PlateDetectRequest(BaseModel):
     plate_image_id: str | None = None
 
 
+class PlateDetectBatchRequest(BaseModel):
+    image_ids: list[str] = Field(min_length=1, max_length=10)
+    university_id: str | None = None
+    campus_id: str | None = None
+    gate_id: str | None = None
+    country_code: str | None = None
+
+
 class BoundingBox(BaseModel):
     x: int = Field(ge=0)
     y: int = Field(ge=0)
@@ -39,4 +47,19 @@ class PlateDetectResponse(BaseModel):
     source: str
     detector_provider: str
     ocr_provider: str
+    warnings: list[str] = Field(default_factory=list)
+
+
+class PlateBatchResultItem(BaseModel):
+    image_id: str
+    plate_text: str | None = None
+    confidence: float = Field(ge=0, le=1)
+    status: PlateDetectionStatus
+
+
+class PlateDetectBatchResponse(BaseModel):
+    status: PlateDetectionStatus
+    plate_text: str | None = None
+    confidence: float = Field(ge=0, le=1)
+    results: list[PlateBatchResultItem] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

@@ -60,3 +60,12 @@ class PlateDetectionOutcome:
     valid_format: bool = False
     detector_provider: str = "none"
     ocr_provider: str = "none"
+
+
+@dataclass(slots=True)
+class PlateBatchDetectionOutcome:
+    status: str
+    plate_text: str | None
+    confidence: float
+    results: list[PlateDetectionOutcome] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)

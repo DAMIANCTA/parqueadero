@@ -253,6 +253,68 @@ class PlateDetectionResult {
   bool get autoAccepted => detected && confidence >= minimumAutoAcceptance;
 }
 
+class PlateBatchResultItem {
+  const PlateBatchResultItem({
+    required this.imageId,
+    required this.plateText,
+    required this.confidence,
+    required this.status,
+  });
+
+  final String imageId;
+  final String? plateText;
+  final double confidence;
+  final String status;
+}
+
+class PlateBatchDetectionResult {
+  const PlateBatchDetectionResult({
+    required this.status,
+    required this.plateText,
+    required this.confidence,
+    required this.results,
+    required this.warnings,
+    required this.detectedAt,
+  });
+
+  final String status;
+  final String? plateText;
+  final double confidence;
+  final List<PlateBatchResultItem> results;
+  final List<String> warnings;
+  final DateTime detectedAt;
+
+  bool get detected => status == 'DETECTED' && (plateText?.isNotEmpty ?? false);
+  bool get autoAccepted => confidence >= PlateDetectionResult.minimumAutoAcceptance && detected;
+  bool get inconsistent => warnings.contains('INCONSISTENT_RESULT');
+
+  PlateDetectionResult toPrimaryDetection() {
+    return PlateDetectionResult(
+      imageId: results.isNotEmpty ? results.first.imageId : 'batch',
+      plateText: plateText,
+      confidence: confidence,
+      boundingBox: null,
+      candidates: results
+          .where((result) => (result.plateText ?? '').isNotEmpty)
+          .map(
+            (result) => PlateCandidateResult(
+              text: result.plateText ?? '',
+              confidence: result.confidence,
+            ),
+          )
+          .toList(),
+      status: status,
+      mode: 'batch',
+      validFormat: plateText != null,
+      source: 'minio',
+      detectorProvider: 'batch-consensus',
+      ocrProvider: 'batch-consensus',
+      warnings: warnings,
+      detectedAt: detectedAt,
+    );
+  }
+}
+
 class LivenessFrame {
   const LivenessFrame({
     required this.frameId,

@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile
 from minio.error import S3Error
 
 from config import settings
-from schemas.plates import PlateDetectRequest, PlateDetectResponse
+from schemas.plates import PlateDetectBatchRequest, PlateDetectBatchResponse, PlateDetectRequest, PlateDetectResponse
 from security import require_permissions
 from services.plate_service import PlateService
 
@@ -80,6 +80,39 @@ async def detect_plate(request: Request) -> PlateDetectResponse:
         source=response_source,
         detector_provider=outcome.detector_provider,
         ocr_provider=outcome.ocr_provider,
+        warnings=outcome.warnings,
+    )
+
+
+@router.post("/plates/detect-batch", response_model=PlateDetectBatchResponse, dependencies=[require_permissions("plates.detect")])
+async def detect_plate_batch(payload: PlateDetectBatchRequest) -> PlateDetectBatchResponse:
+    try:
+        outcome = plate_service.detect_plate_batch(
+            image_ids=payload.image_ids,
+            country_code=payload.country_code,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except S3Error as exc:
+        raise HTTPException(status_code=404, detail=f"MinIO object not found: {exc.code}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return PlateDetectBatchResponse(
+        status=outcome.status,
+        plate_text=outcome.plate_text,
+        confidence=outcome.confidence,
+        results=[
+            {
+                "image_id": result.image_id,
+                "plate_text": result.plate_text,
+                "confidence": result.confidence,
+                "status": result.status,
+            }
+            for result in outcome.results
+        ],
         warnings=outcome.warnings,
     )
 

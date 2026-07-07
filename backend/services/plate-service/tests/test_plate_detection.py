@@ -1,11 +1,11 @@
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
-
 from config import settings
-from main import app
+from services.plate_models import PlateDetectionOutcome, PlateTextCandidate
+from services.plate_service import PlateService
 
 
 ASSETS_DIR = Path(__file__).parent / "assets"
@@ -13,7 +13,7 @@ ASSETS_DIR = Path(__file__).parent / "assets"
 
 class PlateDetectionTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.client = TestClient(app)
+        self.service = PlateService()
         self.original_mode = settings.plate_detection_mode
 
     def tearDown(self) -> None:
@@ -23,78 +23,118 @@ class PlateDetectionTests(unittest.TestCase):
         settings.plate_detection_mode = "mock"
         image_path = ASSETS_DIR / "visitor_ABC1234.jpg"
 
-        with image_path.open("rb") as image_file, patch(
-            "security.decode_access_token",
-            return_value={"permissions": ["plates.detect", "*"], "sub": "test"},
-        ):
-            response = self.client.post(
-                "/plates/detect",
-                headers={"Authorization": "Bearer fake-token"},
-                files={"image": (image_path.name, image_file, "image/jpeg")},
-                data={"country_code": "EC"},
-            )
+        outcome = self.service.detect_plate(
+            image_id="upload-001",
+            upload_bytes=image_path.read_bytes(),
+            upload_filename=image_path.name,
+            upload_content_type="image/jpeg",
+            country_code="EC",
+        )
 
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["plate_text"], "ABC1234")
-        self.assertEqual(payload["status"], "DETECTED")
-        self.assertEqual(payload["source"], "upload")
+        self.assertEqual(outcome.plate_text, "ABC1234")
+        self.assertEqual(outcome.status, "DETECTED")
+        self.assertTrue(outcome.valid_format)
 
     def test_json_mode_uses_registered_image_reference(self) -> None:
         settings.plate_detection_mode = "mock"
         image_path = ASSETS_DIR / "visitor_ABC1234.jpg"
         image_bytes = image_path.read_bytes()
 
-        with patch(
-            "routes.plates.image_source_service.load_from_minio",
-            return_value=type(
-                "LoadedImagePayload",
-                (),
-                {
-                    "image_id": "img-minio-001",
-                    "filename": "visitor_ABC1234.jpg",
-                    "content_type": "image/jpeg",
-                    "content": image_bytes,
-                    "source": "minio",
-                    "object_name": "2026/07/06/plate_entry/visitor_ABC1234.jpg",
-                },
-            )(),
-        ), patch("security.decode_access_token", return_value={"permissions": ["plates.detect", "*"], "sub": "test"}):
-            response = self.client.post(
-                "/plates/detect",
-                json={
-                    "image_id": "img-minio-001",
-                    "university_id": "uce",
-                    "campus_id": "matriz",
-                    "gate_id": "norte",
-                },
-                headers={"Authorization": "Bearer fake-token"},
+        loaded_image = SimpleNamespace(
+            image_id="img-minio-001",
+            filename="visitor_ABC1234.jpg",
+            content_type="image/jpeg",
+            content=image_bytes,
+            source="minio",
+            object_name="2026/07/06/plate_entry/visitor_ABC1234.jpg",
+        )
+
+        with patch.object(self.service.image_source_service, "load_from_minio", return_value=loaded_image):
+            outcome = self.service.detect_plate(
+                image_id="img-minio-001",
+                country_code="EC",
             )
 
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["image_id"], "img-minio-001")
-        self.assertEqual(payload["source"], "minio")
-        self.assertEqual(payload["plate_text"], "ABC1234")
-        self.assertEqual(payload["status"], "DETECTED")
-        self.assertGreaterEqual(len(payload["candidates"]), 1)
+        self.assertEqual(outcome.image_id, "img-minio-001")
+        self.assertEqual(outcome.plate_text, "ABC1234")
+        self.assertEqual(outcome.status, "DETECTED")
+        self.assertGreaterEqual(len(outcome.candidates), 1)
 
     def test_not_detected_status_is_returned_for_unreadable_mock(self) -> None:
         settings.plate_detection_mode = "mock"
 
-        with patch("security.decode_access_token", return_value={"permissions": ["plates.detect", "*"], "sub": "test"}):
-            response = self.client.post(
-                "/plates/detect",
-                headers={"Authorization": "Bearer fake-token"},
-                files={"image": ("UNREADABLE.jpg", b"NO_PLATE", "image/jpeg")},
-                data={"country_code": "EC"},
+        outcome = self.service.detect_plate(
+            image_id="bad-001",
+            upload_bytes=b"NO_PLATE",
+            upload_filename="UNREADABLE.jpg",
+            upload_content_type="image/jpeg",
+            country_code="EC",
+        )
+
+        self.assertEqual(outcome.status, "NOT_DETECTED")
+        self.assertIsNone(outcome.plate_text)
+        self.assertEqual(outcome.confidence, 0.0)
+
+    def test_detect_batch_selects_most_repeated_plate(self) -> None:
+        results = [
+            PlateDetectionOutcome(
+                status="DETECTED",
+                plate_text="AGH430",
+                confidence=0.84,
+                image_id="img-1",
+                bounding_box=None,
+                candidates=[PlateTextCandidate(text="AGH430", confidence=0.84)],
+                valid_format=True,
+            ),
+            PlateDetectionOutcome(
+                status="DETECTED",
+                plate_text="AGH430",
+                confidence=0.91,
+                image_id="img-2",
+                bounding_box=None,
+                candidates=[PlateTextCandidate(text="AGH430", confidence=0.91)],
+                valid_format=True,
+            ),
+            PlateDetectionOutcome(
+                status="LOW_CONFIDENCE",
+                plate_text="A6H430",
+                confidence=0.68,
+                image_id="img-3",
+                bounding_box=None,
+                candidates=[PlateTextCandidate(text="A6H430", confidence=0.68)],
+                valid_format=True,
+            ),
+        ]
+
+        with patch.object(self.service, "detect_plate", side_effect=results):
+            outcome = self.service.detect_plate_batch(
+                image_ids=["img-1", "img-2", "img-3"],
+                country_code="EC",
             )
 
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["status"], "NOT_DETECTED")
-        self.assertEqual(payload["plate_text"], "")
-        self.assertEqual(payload["confidence"], 0.0)
+        self.assertEqual(outcome.status, "DETECTED")
+        self.assertEqual(outcome.plate_text, "AGH430")
+        self.assertEqual(outcome.confidence, 0.91)
+        self.assertEqual(len(outcome.results), 3)
+        self.assertIn("INCONSISTENT_RESULT", outcome.warnings)
+
+    def test_detect_batch_returns_not_detected_when_all_fail(self) -> None:
+        results = [
+            PlateDetectionOutcome(status="NOT_DETECTED", plate_text=None, confidence=0.0, image_id="img-1", bounding_box=None, warnings=["OCR_NO_TEXT"]),
+            PlateDetectionOutcome(status="NOT_DETECTED", plate_text=None, confidence=0.0, image_id="img-2", bounding_box=None, warnings=["PLATE_REGION_NOT_FOUND"]),
+            PlateDetectionOutcome(status="NOT_DETECTED", plate_text=None, confidence=0.0, image_id="img-3", bounding_box=None, warnings=["LOW_QUALITY_IMAGE"]),
+        ]
+
+        with patch.object(self.service, "detect_plate", side_effect=results):
+            outcome = self.service.detect_plate_batch(
+                image_ids=["img-1", "img-2", "img-3"],
+                country_code="EC",
+            )
+
+        self.assertEqual(outcome.status, "NOT_DETECTED")
+        self.assertIsNone(outcome.plate_text)
+        self.assertEqual(outcome.confidence, 0.0)
+        self.assertIn("BATCH_NOT_DETECTED", outcome.warnings)
 
 
 if __name__ == "__main__":

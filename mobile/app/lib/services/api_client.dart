@@ -159,6 +159,50 @@ class ApiClient {
     );
   }
 
+  Future<PlateBatchDetectionResult> detectPlateBatch({
+    required List<String> imageIds,
+    required String universityId,
+    required String campusId,
+    required String gateId,
+  }) async {
+    final response = await _client.post(
+      Uri.parse('${AppConfig.apiBaseUrl}/plates/detect-batch'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'image_ids': imageIds,
+        'university_id': universityId,
+        'campus_id': campusId,
+        'gate_id': gateId,
+      }),
+    );
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode >= 400) {
+      throw Exception(body['detail'] ?? 'No se pudo detectar la placa por lote.');
+    }
+
+    final rawResults = body['results'] as List? ?? const [];
+    final rawWarnings = body['warnings'] as List? ?? const [];
+    return PlateBatchDetectionResult(
+      status: body['status'] as String? ?? 'NOT_DETECTED',
+      plateText: body['plate_text'] as String?,
+      confidence: (body['confidence'] as num? ?? 0).toDouble(),
+      results: rawResults
+          .whereType<Map>()
+          .map(
+            (item) => PlateBatchResultItem(
+              imageId: item['image_id'] as String? ?? 'n/a',
+              plateText: item['plate_text'] as String?,
+              confidence: (item['confidence'] as num? ?? 0).toDouble(),
+              status: item['status'] as String? ?? 'NOT_DETECTED',
+            ),
+          )
+          .toList(),
+      warnings: rawWarnings.map((item) => item.toString()).toList(),
+      detectedAt: DateTime.now(),
+    );
+  }
+
   Future<AuthorizationResult> submitEntry({
     required String universityId,
     required String campusId,

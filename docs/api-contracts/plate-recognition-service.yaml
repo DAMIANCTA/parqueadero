@@ -117,3 +117,67 @@ paths:
                     type: array
                     items:
                       type: string
+  /plates/detect-batch:
+    post:
+      summary: Detect vehicle plate from multiple evidence images
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [image_ids]
+              properties:
+                image_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  items:
+                    type: string
+                university_id:
+                  type: string
+                campus_id:
+                  type: string
+                gate_id:
+                  type: string
+                country_code:
+                  type: string
+      responses:
+        "200":
+          description: Batch plate detection returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, confidence, results, warnings]
+                properties:
+                  status:
+                    type: string
+                    enum: [DETECTED, LOW_CONFIDENCE, NOT_DETECTED]
+                  plate_text:
+                    type: string
+                    nullable: true
+                  confidence:
+                    type: number
+                    format: float
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [image_id, confidence, status]
+                      properties:
+                        image_id:
+                          type: string
+                        plate_text:
+                          type: string
+                          nullable: true
+                        confidence:
+                          type: number
+                          format: float
+                        status:
+                          type: string
+                          enum: [DETECTED, LOW_CONFIDENCE, NOT_DETECTED]
+                  warnings:
+                    type: array
+                    items:
+                      type: string

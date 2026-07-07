@@ -8,19 +8,20 @@ Esta fase reemplaza la digitacion manual de la placa para el operador normal. La
 
 1. El operador presiona `Capturar placa`.
 2. La app muestra una guia visual para encuadrar la placa.
-3. La app toma la foto o permite seleccionarla.
-4. La imagen se sube con `POST /evidence/upload`.
-5. La app recibe `image_id`.
-6. La app llama `POST /plates/detect`.
-7. `plate-service` busca la referencia y descarga la imagen desde MinIO.
-8. El servicio evalua calidad, intenta detectar region de placa y luego ejecuta OCR.
+3. La app toma `3 capturas` seguidas o permite seleccionar hasta `3 imagenes`.
+4. Cada imagen se sube con `POST /evidence/upload`.
+5. La app recibe una lista de `image_id`.
+6. La app llama `POST /plates/detect-batch`.
+7. `plate-service` procesa cada `image_id` usando el pipeline ALPR normal.
+8. El servicio agrupa resultados por texto de placa y escoge la mejor por consenso.
 9. La app muestra:
-   - placa detectada
-   - confianza
+   - placa final seleccionada
+   - confianza final
    - advertencias
-   - candidatos
-10. Si la confianza es menor a `0.75`, la app bloquea la autorizacion automatica y exige `Reintentar captura`.
-11. Solo un operador de seguridad puede corregir la placa manualmente y debe registrar motivo para auditoria.
+   - resultados por captura
+10. Si la confianza final es menor a `0.75`, la app bloquea la autorizacion automatica y exige `Reintentar captura`.
+11. Si hay varias placas distintas entre las capturas, la app muestra `Resultado inconsistente`.
+12. Solo un operador de seguridad puede corregir la placa manualmente y debe registrar motivo para auditoria.
 
 ## Endpoint principal
 
@@ -88,6 +89,48 @@ Response cuando no detecta:
   "warnings": ["LOW_QUALITY_IMAGE", "PLATE_REGION_NOT_FOUND"]
 }
 ```
+
+### `POST /plates/detect-batch`
+
+Request:
+
+```json
+{
+  "image_ids": [
+    "img-001",
+    "img-002",
+    "img-003"
+  ],
+  "university_id": "uce",
+  "campus_id": "matriz",
+  "gate_id": "norte"
+}
+```
+
+Response:
+
+```json
+{
+  "status": "DETECTED",
+  "plate_text": "AGH430",
+  "confidence": 0.91,
+  "results": [
+    {"image_id": "img-001", "plate_text": "AGH430", "confidence": 0.84, "status": "DETECTED"},
+    {"image_id": "img-002", "plate_text": "AGH430", "confidence": 0.91, "status": "DETECTED"},
+    {"image_id": "img-003", "plate_text": "A6H430", "confidence": 0.68, "status": "LOW_CONFIDENCE"}
+  ],
+  "warnings": ["INCONSISTENT_RESULT"]
+}
+```
+
+## Reglas de consenso por lote
+
+- elegir la placa mas repetida;
+- si hay empate, elegir la de mayor confianza;
+- la confianza final corresponde a la mejor lectura de la placa ganadora;
+- si todas las capturas fallan, responder `NOT_DETECTED`;
+- no inventar placas;
+- si aparecen varias placas distintas validas, agregar warning `INCONSISTENT_RESULT`.
 
 ## Modos soportados
 
@@ -171,8 +214,11 @@ Formato configurable por entorno:
 - el usuario normal no escribe la placa;
 - el campo de placa detectada es de solo lectura;
 - la captura muestra una guia visual para encuadrar la placa;
+- la app trabaja con hasta `3 capturas` por intento;
+- la app muestra el resultado de cada captura antes de decidir la placa final;
 - si `confidence < 0.75`, la app no permite entrada o salida automatica;
 - si no hay lectura valida, se muestra `Reintentar captura`;
+- si el lote trae placas distintas, se muestra `Resultado inconsistente`;
 - solo seguridad puede corregir manualmente la placa;
 - la correccion manual exige motivo.
 
@@ -196,6 +242,7 @@ Cuando existe correccion manual, la app envia al backend:
 `plate-service` registra eventos utiles para depuracion:
 
 - `image_id` recibido
+- lista `image_ids` cuando la operacion es por lote
 - `object_name` descargado
 - tamano de imagen
 - `quality_score`
@@ -203,6 +250,7 @@ Cuando existe correccion manual, la app envia al backend:
 - texto OCR crudo
 - texto normalizado
 - confianza final
+- placa ganadora por consenso
 - advertencias y causa de fallo
 
 ## Dependencias del servicio
