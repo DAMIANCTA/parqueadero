@@ -76,6 +76,8 @@ class GatewayRouteTests(unittest.TestCase):
     @patch("routes.integration.integration_service.get_payment_by_plate")
     def test_get_payment_by_plate_is_available_for_operational_check(self, get_payment_by_plate) -> None:
         get_payment_by_plate.return_value = {
+            "found": True,
+            "message": "Sesion activa encontrada",
             "session_id": "session-visitor-pending-001",
             "plate_text": "VISPEND",
             "entry_time": "2026-07-07T20:00:00Z",
@@ -89,6 +91,7 @@ class GatewayRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
+        self.assertTrue(body["found"])
         self.assertEqual(body["plate_text"], "VISPEND")
         self.assertEqual(body["payment_status"], "PENDING")
 
@@ -101,13 +104,21 @@ class GatewayRouteTests(unittest.TestCase):
             "paid_at": "2026-07-07T20:10:31Z",
             "audit_log_id": "audit-123",
             "session": {
+                "found": True,
+                "message": "Pago registrado",
                 "session_id": "session-visitor-pending-001",
                 "plate_text": "VISPEND",
                 "entry_time": "2026-07-07T20:00:00Z",
+                "session_status": "INSIDE",
                 "duration_minutes": 45,
                 "amount": 1.5,
                 "currency": "USD",
                 "payment_status": "PAID",
+                "paid_at": "2026-07-07T20:10:31Z",
+                "paid_amount": 1.5,
+                "payment_method": "cash",
+                "payment_valid_until": "2026-07-07T20:25:31Z",
+                "receipt_number": "REC-20260707-0002",
             },
         }
 

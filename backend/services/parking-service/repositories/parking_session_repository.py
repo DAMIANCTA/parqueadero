@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, UTC
 
 
 class ParkingSessionRepository:
@@ -14,6 +15,7 @@ class ParkingSessionRepository:
             "entry_plate_evidence_id": None,
             "exit_face_evidence_id": None,
             "exit_plate_evidence_id": None,
+            "exit_time": None,
         },
         "VISPEND": {
             "session_id": "session-visitor-pending-001",
@@ -26,6 +28,7 @@ class ParkingSessionRepository:
             "entry_plate_evidence_id": None,
             "exit_face_evidence_id": None,
             "exit_plate_evidence_id": None,
+            "exit_time": None,
         },
     }
     session_records = {
@@ -56,6 +59,7 @@ class ParkingSessionRepository:
             "entry_plate_evidence_id": entry_plate_evidence_id,
             "exit_face_evidence_id": None,
             "exit_plate_evidence_id": None,
+            "exit_time": None,
         }
         if person_type == "visitor":
             self.active_visitor_sessions[plate_text] = session.copy()
@@ -76,12 +80,14 @@ class ParkingSessionRepository:
         exit_plate_evidence_id: str | None = None,
     ) -> dict:
         record = self.session_records.get(session_id, {}).copy()
+        exit_time = datetime.now(UTC)
         for session_plate, session in list(self.active_visitor_sessions.items()):
             if session["session_id"] == session_id:
                 session["session_status"] = "OUTSIDE"
                 session["payment_status"] = payment_status
                 session["exit_face_evidence_id"] = exit_face_evidence_id
                 session["exit_plate_evidence_id"] = exit_plate_evidence_id
+                session["exit_time"] = exit_time
                 record = session.copy()
                 self.active_visitor_sessions.pop(session_plate, None)
                 break
@@ -94,6 +100,7 @@ class ParkingSessionRepository:
                 "plate_text": plate_text,
                 "exit_face_evidence_id": exit_face_evidence_id,
                 "exit_plate_evidence_id": exit_plate_evidence_id,
+                "exit_time": exit_time,
             }
         )
         self.session_records[session_id] = record
@@ -117,6 +124,7 @@ class ParkingSessionRepository:
             "entry_plate_evidence_id": None,
             "exit_face_evidence_id": exit_face_evidence_id,
             "exit_plate_evidence_id": exit_plate_evidence_id,
+            "exit_time": datetime.now(UTC),
         }
         self.session_records[session["session_id"]] = session.copy()
         return self._session_summary(session)
@@ -157,4 +165,5 @@ class ParkingSessionRepository:
             "payment_status": session["payment_status"],
             "person_type": session["person_type"],
             "plate_text": session["plate_text"],
+            "exit_time": session.get("exit_time"),
         }

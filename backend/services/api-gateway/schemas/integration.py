@@ -105,13 +105,22 @@ class PaymentByPlateResponse(BaseModel):
 
 
 class CashierPaymentLookupResponse(BaseModel):
-    session_id: str
-    plate_text: str
-    entry_time: str
-    duration_minutes: int
-    amount: float
-    currency: str
-    payment_status: str
+    found: bool
+    message: str
+    session_id: str | None = None
+    plate_text: str | None = None
+    entry_time: str | None = None
+    exit_time: str | None = None
+    session_status: str | None = None
+    duration_minutes: int | None = None
+    amount: float | None = None
+    currency: str | None = None
+    payment_status: str | None = None
+    paid_at: str | None = None
+    paid_amount: float | None = None
+    payment_method: str | None = None
+    payment_valid_until: str | None = None
+    receipt_number: str | None = None
 
 
 class CashierPaymentRegistrationRequest(BaseModel):

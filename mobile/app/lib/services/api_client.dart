@@ -79,13 +79,22 @@ class ApiClient {
     }
 
     return PaymentLookupResult(
+      found: body['found'] as bool? ?? false,
+      message: body['message'] as String? ?? 'Sin mensaje',
       sessionId: body['session_id'] as String? ?? 'n/a',
       plateText: body['plate_text'] as String? ?? plateText,
       entryTime: DateTime.tryParse(body['entry_time'] as String? ?? '') ?? DateTime.now(),
+      exitTime: DateTime.tryParse(body['exit_time'] as String? ?? ''),
+      sessionStatus: body['session_status'] as String? ?? 'UNKNOWN',
       durationMinutes: body['duration_minutes'] as int? ?? 0,
       amount: (body['amount'] as num? ?? 0).toDouble(),
       currency: body['currency'] as String? ?? 'USD',
       paymentStatus: body['payment_status'] as String? ?? 'PENDING',
+      paidAt: DateTime.tryParse(body['paid_at'] as String? ?? ''),
+      paidAmount: (body['paid_amount'] as num?)?.toDouble(),
+      paymentMethod: body['payment_method'] as String?,
+      paymentValidUntil: DateTime.tryParse(body['payment_valid_until'] as String? ?? ''),
+      receiptNumber: body['receipt_number'] as String?,
     );
   }
 

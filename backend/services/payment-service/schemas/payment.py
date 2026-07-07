@@ -22,6 +22,8 @@ class SessionPaymentDetail(BaseModel):
     cashier_user_id: str | None = None
     payment_method: PaymentMethod | None = None
     paid_at: datetime | None = None
+    paid_amount: float | None = None
+    payment_valid_until: datetime | None = None
     receipt_number: str | None = None
     notes: str | None = None
 
@@ -46,13 +48,22 @@ class PaymentByPlateRequest(BaseModel):
 
 
 class CashierPaymentLookupResponse(BaseModel):
-    session_id: str
-    plate_text: str
-    entry_time: datetime
-    duration_minutes: int
-    amount: float
-    currency: str
-    payment_status: PaymentStatus
+    found: bool
+    message: str
+    session_id: str | None = None
+    plate_text: str | None = None
+    entry_time: datetime | None = None
+    exit_time: datetime | None = None
+    session_status: str | None = None
+    duration_minutes: int | None = None
+    amount: float | None = None
+    currency: str | None = None
+    payment_status: PaymentStatus | None = None
+    paid_at: datetime | None = None
+    paid_amount: float | None = None
+    payment_method: PaymentMethod | None = None
+    payment_valid_until: datetime | None = None
+    receipt_number: str | None = None
 
 
 class CashierPaymentRegistrationRequest(BaseModel):
@@ -87,6 +98,10 @@ class PaymentStatusResponse(BaseModel):
     payment_status: PaymentStatus | None = None
     amount_due: float | None = None
     paid_at: datetime | None = None
+    paid_amount: float | None = None
+    payment_valid_until: datetime | None = None
+    session_status: str | None = None
+    exit_time: datetime | None = None
 
 
 class PaymentStatusByPlateResponse(BaseModel):
@@ -97,9 +112,21 @@ class PaymentStatusByPlateResponse(BaseModel):
     payment_status: PaymentStatus | None = None
     amount_due: float | None = None
     paid_at: datetime | None = None
+    paid_amount: float | None = None
+    payment_valid_until: datetime | None = None
+    session_status: str | None = None
+    exit_time: datetime | None = None
 
 
 class InternalSessionUpsertRequest(BaseModel):
     session_id: str
     plate_text: str = Field(min_length=3, max_length=20)
     payment_status: PaymentStatus = "PENDING"
+
+
+class InternalSessionCloseRequest(BaseModel):
+    session_id: str
+    plate_text: str = Field(min_length=3, max_length=20)
+    payment_status: PaymentStatus = "PAID"
+    exit_time: datetime
+    session_status: str = "OUTSIDE"

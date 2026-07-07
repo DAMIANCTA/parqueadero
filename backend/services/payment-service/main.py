@@ -25,6 +25,7 @@ app.add_middleware(
         "/version",
         "/payments/internal/status-by-plate",
         "/payments/internal/sessions/upsert",
+        "/payments/internal/sessions/close",
     },
 )
 app.add_middleware(

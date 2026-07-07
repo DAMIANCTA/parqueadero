@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     environment: str = "local"
     fixed_first_hour_amount: float = 1.50
     additional_hour_amount: float = 0.75
+    payment_grace_minutes: int = 15
     currency: str = "USD"
     demo_cashier_user_id: str = "cashier-demo"
     jwt_secret_key: str = ""

@@ -1,4 +1,6 @@
 import unittest
+from datetime import datetime, timedelta, UTC
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -93,6 +95,36 @@ class ParkingExitFlowTests(unittest.TestCase):
         payload = response.json()
         self.assertFalse(payload["authorized"])
         self.assertEqual(payload["message"], "Permission is not valid")
+
+    def test_visitor_exit_rejects_when_payment_grace_period_expired(self) -> None:
+        with patch(
+            "routes.parking.exit_service.payment_repository.get_status_by_plate",
+            return_value={
+                "found": True,
+                "payment_status": "PAID",
+                "paid_at": (datetime.now(UTC) - timedelta(minutes=20)).isoformat(),
+                "paid_amount": 1.50,
+                "payment_valid_until": (datetime.now(UTC) - timedelta(minutes=5)).isoformat(),
+            },
+        ):
+            response = self.client.post(
+                "/parking/exit",
+                json={
+                    "university_id": "11111111-1111-1111-1111-111111111111",
+                    "campus_id": "22222222-2222-2222-2222-222222222222",
+                    "gate_id": "33333333-3333-3333-3333-333333333332",
+                    "plate_text": "VIS1234",
+                    "face_image_id": "face-exit-001",
+                    "liveness_score": 0.96,
+                    "confidence_plate": 0.98,
+                    "confidence_face": 0.97,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload["authorized"])
+        self.assertEqual(payload["message"], "Payment grace period expired")
 
 
 if __name__ == "__main__":

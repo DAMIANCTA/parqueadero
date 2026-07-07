@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import math
 
 from config import settings
@@ -17,3 +17,6 @@ class TariffService:
         current = current_time or datetime.utcnow().astimezone()
         seconds = max((current - entry_time).total_seconds(), 0)
         return math.ceil(seconds / 60)
+
+    def calculate_payment_valid_until(self, paid_at: datetime) -> datetime:
+        return paid_at + timedelta(minutes=settings.payment_grace_minutes)

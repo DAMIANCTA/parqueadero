@@ -172,24 +172,42 @@ class PaymentByPlateResult {
 
 class PaymentLookupResult {
   const PaymentLookupResult({
+    required this.found,
+    required this.message,
     required this.sessionId,
     required this.plateText,
     required this.entryTime,
+    required this.exitTime,
+    required this.sessionStatus,
     required this.durationMinutes,
     required this.amount,
     required this.currency,
     required this.paymentStatus,
+    required this.paidAt,
+    required this.paidAmount,
+    required this.paymentMethod,
+    required this.paymentValidUntil,
+    required this.receiptNumber,
   });
 
+  final bool found;
+  final String message;
   final String sessionId;
   final String plateText;
   final DateTime entryTime;
+  final DateTime? exitTime;
+  final String sessionStatus;
   final int durationMinutes;
   final double amount;
   final String currency;
   final String paymentStatus;
+  final DateTime? paidAt;
+  final double? paidAmount;
+  final String? paymentMethod;
+  final DateTime? paymentValidUntil;
+  final String? receiptNumber;
 
-  bool get isPaid => paymentStatus == 'PAID';
+  bool get isPaid => found && paymentStatus == 'PAID';
 }
 
 class LocalEvidenceDraft {

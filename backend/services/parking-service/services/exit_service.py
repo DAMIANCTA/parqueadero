@@ -1,3 +1,5 @@
+from datetime import datetime, UTC
+
 from config import settings
 from repositories.access_event_repository import AccessEventRepository
 from repositories.audit_log_repository import AuditLogRepository
@@ -82,6 +84,19 @@ class ExitService:
 
         payment_status = self.payment_repository.get_status_by_plate(normalized_plate)
         effective_payment_status = payment_status["payment_status"] if payment_status and payment_status.get("found") else visitor_session["payment_status"]
+        payment_valid_until = None
+        if payment_status and payment_status.get("found") and payment_status.get("payment_valid_until"):
+            payment_valid_until = datetime.fromisoformat(str(payment_status["payment_valid_until"]).replace("Z", "+00:00"))
+        print(
+            "parking-service visitor_exit_payment_check "
+            f"session_id={visitor_session['session_id']} plate_text={normalized_plate} "
+            f"payment_status_before={visitor_session.get('payment_status')} "
+            f"payment_status_effective={effective_payment_status} "
+            f"paid_at={payment_status.get('paid_at') if payment_status else None} "
+            f"paid_amount={payment_status.get('paid_amount') if payment_status else None} "
+            f"payment_valid_until={payment_status.get('payment_valid_until') if payment_status else None} "
+            f"session_status_before={visitor_session.get('session_status')}"
+        )
         if effective_payment_status != "PAID":
             return self._reject(
                 payload=payload,
@@ -92,6 +107,33 @@ class ExitService:
                 publish_status=True,
                 event_type="exit",
                 status_reason="payment_pending",
+                extra_metadata={
+                    "payment_status_before": visitor_session.get("payment_status"),
+                    "payment_status_after": effective_payment_status,
+                    "paid_at": payment_status.get("paid_at") if payment_status else None,
+                    "paid_amount": payment_status.get("paid_amount") if payment_status else None,
+                    "payment_valid_until": payment_status.get("payment_valid_until") if payment_status else None,
+                    "session_status_before": visitor_session.get("session_status"),
+                },
+            )
+        if payment_valid_until is not None and datetime.now(UTC) > payment_valid_until:
+            return self._reject(
+                payload=payload,
+                normalized_plate=normalized_plate,
+                reason="Payment grace period expired",
+                session_id=visitor_session["session_id"],
+                create_incident=True,
+                publish_status=True,
+                event_type="exit",
+                status_reason="payment_grace_expired",
+                extra_metadata={
+                    "payment_status_before": visitor_session.get("payment_status"),
+                    "payment_status_after": effective_payment_status,
+                    "paid_at": payment_status.get("paid_at") if payment_status else None,
+                    "paid_amount": payment_status.get("paid_amount") if payment_status else None,
+                    "payment_valid_until": payment_status.get("payment_valid_until") if payment_status else None,
+                    "session_status_before": visitor_session.get("session_status"),
+                },
             )
 
         session_record = self.parking_session_repository.close_session(
@@ -101,6 +143,12 @@ class ExitService:
             payment_status=effective_payment_status,
             exit_face_evidence_id=payload.face_image_id if payload.face_mock_id else payload.face_evidence_id,
             exit_plate_evidence_id=payload.plate_image_id or payload.plate_evidence_id,
+        )
+        self.payment_repository.close_visitor_session(
+            session_id=visitor_session["session_id"],
+            plate_text=normalized_plate,
+            payment_status=effective_payment_status,
+            exit_time=session_record.get("exit_time"),
         )
         self.evidence_service.link_evidence_to_session(
             payload.face_image_id if payload.face_mock_id else payload.face_evidence_id,
@@ -118,6 +166,16 @@ class ExitService:
             session_record=session_record,
             action="parking.exit.authorized.visitor",
             event_reason="exit_granted",
+            extra_metadata={
+                "payment_status_before": visitor_session.get("payment_status"),
+                "payment_status_after": effective_payment_status,
+                "payment_valid_until": payment_status.get("payment_valid_until") if payment_status else None,
+                "paid_at": payment_status.get("paid_at") if payment_status else None,
+                "paid_amount": payment_status.get("paid_amount") if payment_status else None,
+                "session_status_before": visitor_session.get("session_status"),
+                "session_status_after": session_record.get("session_status"),
+                "exit_time": session_record.get("exit_time").isoformat() if session_record.get("exit_time") else None,
+            },
         )
 
     def _process_registered_exit(self, payload: ParkingExitRequest, normalized_plate: str) -> ParkingExitResponse:
@@ -188,6 +246,7 @@ class ExitService:
         session_record: dict,
         action: str,
         event_reason: str,
+        extra_metadata: dict | None = None,
     ) -> ParkingExitResponse:
         gate_command = self.iot_repository.open_gate(
             university_id=payload.university_id,
@@ -217,7 +276,15 @@ class ExitService:
                 "plate_detected_text": payload.plate_detected_text,
                 "plate_detection_confidence": payload.plate_detection_confidence,
                 "plate_override_reason": payload.plate_override_reason,
+                **(extra_metadata or {}),
             },
+        )
+        print(
+            "parking-service exit_authorized "
+            f"session_id={session_record['session_id']} plate_text={normalized_plate} "
+            f"payment_status_after={session_record.get('payment_status')} "
+            f"session_status_after={session_record.get('session_status')} "
+            f"exit_time={session_record.get('exit_time')}"
         )
         return ParkingExitResponse(
             authorized=True,
@@ -240,6 +307,7 @@ class ExitService:
         publish_status: bool = False,
         event_type: str = "exit",
         status_reason: str | None = None,
+        extra_metadata: dict | None = None,
     ) -> ParkingExitResponse:
         access_event = self.access_event_repository.create_exit_event(
             university_id=payload.university_id,
@@ -262,6 +330,7 @@ class ExitService:
                 "plate_detected_text": payload.plate_detected_text,
                 "plate_detection_confidence": payload.plate_detection_confidence,
                 "plate_override_reason": payload.plate_override_reason,
+                **(extra_metadata or {}),
             },
         )
         incident_id = None

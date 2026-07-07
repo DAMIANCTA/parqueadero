@@ -5,6 +5,7 @@ from schemas.payment import (
     CashierPaymentLookupResponse,
     CashierPaymentRegistrationRequest,
     CashierPaymentRegistrationResponse,
+    InternalSessionCloseRequest,
     InternalSessionUpsertRequest,
     PaymentByPlateRequest,
     PaymentRequest,
@@ -67,3 +68,9 @@ def get_internal_payment_status_by_plate(request: Request, plate: str) -> Paymen
 def upsert_internal_session(request: Request, payload: InternalSessionUpsertRequest) -> SessionPaymentDetail:
     verify_internal_audit_key(request, settings.audit_internal_key)
     return payment_service.upsert_internal_session(payload)
+
+
+@router.post("/internal/sessions/close", response_model=SessionPaymentDetail)
+def close_internal_session(request: Request, payload: InternalSessionCloseRequest) -> SessionPaymentDetail:
+    verify_internal_audit_key(request, settings.audit_internal_key)
+    return payment_service.close_internal_session(payload)

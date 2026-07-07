@@ -204,7 +204,9 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            result.isPaid
+            !result.found
+                ? result.message
+                : result.isPaid
                 ? 'Pago verificado: la sesion ya esta en PAID.'
                 : 'Pago aun pendiente en Secretaria/Caja.',
           ),
@@ -714,11 +716,21 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Estado de pago: ${_paymentLookup!.paymentStatus}'),
-                  Text('Placa: ${_paymentLookup!.plateText}'),
-                  Text('Entrada: ${_paymentLookup!.entryTime.toLocal()}'),
-                  Text('Tiempo estacionado: ${_paymentLookup!.durationMinutes} min'),
-                  Text('Monto calculado: ${_paymentLookup!.currency} ${_paymentLookup!.amount.toStringAsFixed(2)}'),
+                  Text(_paymentLookup!.message),
+                  if (_paymentLookup!.found) ...[
+                    Text('Estado de pago: ${_paymentLookup!.paymentStatus}'),
+                    Text('Placa: ${_paymentLookup!.plateText}'),
+                    Text('Entrada: ${_paymentLookup!.entryTime.toLocal()}'),
+                    Text('Tiempo estacionado: ${_paymentLookup!.durationMinutes} min'),
+                    Text(
+                      _paymentLookup!.isPaid
+                          ? 'Monto pagado: ${_paymentLookup!.currency} ${(_paymentLookup!.paidAmount ?? _paymentLookup!.amount).toStringAsFixed(2)}'
+                          : 'Monto calculado: ${_paymentLookup!.currency} ${_paymentLookup!.amount.toStringAsFixed(2)}',
+                    ),
+                    if (_paymentLookup!.paidAt != null) Text('Hora de pago: ${_paymentLookup!.paidAt!.toLocal()}'),
+                    if (_paymentLookup!.paymentValidUntil != null)
+                      Text('Valido hasta: ${_paymentLookup!.paymentValidUntil!.toLocal()}'),
+                  ],
                 ],
               ),
             ),

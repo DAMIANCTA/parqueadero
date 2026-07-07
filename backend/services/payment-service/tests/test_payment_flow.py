@@ -96,6 +96,7 @@ class PaymentFlowTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
+        self.assertTrue(payload["found"])
         self.assertEqual(payload["plate_text"], "VISPEND")
         self.assertEqual(payload["payment_status"], "PENDING")
         self.assertGreaterEqual(payload["duration_minutes"], 1)
@@ -117,8 +118,12 @@ class PaymentFlowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertTrue(payload["success"])
+        self.assertTrue(payload["session"]["found"])
         self.assertEqual(payload["session"]["payment_status"], "PAID")
         self.assertTrue(payload["receipt_number"].startswith("REC-"))
+        self.assertIsNotNone(payload["paid_at"])
+        self.assertEqual(payload["session"]["amount"], payload["session"]["paid_amount"])
+        self.assertIsNotNone(payload["session"]["payment_valid_until"])
 
     def test_register_cash_payment_rejects_double_payment(self) -> None:
         response = self.client.post(
@@ -135,6 +140,14 @@ class PaymentFlowTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 409)
+
+    def test_lookup_returns_not_found_for_outside_session(self) -> None:
+        response = self.client.get("/payments/by-plate/VISDONE", headers=self.headers)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload["found"])
+        self.assertEqual(payload["message"], "No active session found for this plate")
 
 
 if __name__ == "__main__":

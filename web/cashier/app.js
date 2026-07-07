@@ -17,10 +17,15 @@ const els = {
   sessionCard: document.getElementById("sessionCard"),
   sessionId: document.getElementById("sessionId"),
   sessionPlate: document.getElementById("sessionPlate"),
+  sessionStatus: document.getElementById("sessionStatus"),
   entryTime: document.getElementById("entryTime"),
   duration: document.getElementById("duration"),
   amount: document.getElementById("amount"),
   paymentStatus: document.getElementById("paymentStatus"),
+  paidAt: document.getElementById("paidAt"),
+  paidAmount: document.getElementById("paidAmount"),
+  paymentValidUntil: document.getElementById("paymentValidUntil"),
+  receiptLabel: document.getElementById("receiptLabel"),
   amountInput: document.getElementById("amountInput"),
   paymentMethod: document.getElementById("paymentMethod"),
   notesInput: document.getElementById("notesInput"),
@@ -97,12 +102,18 @@ async function searchByPlate() {
     if (!response.ok) {
       throw new Error(parseDetail(body.detail) || "No se encontro sesion activa.");
     }
+    if (!body.found) {
+      state.currentSession = null;
+      resetSessionView();
+      els.searchMessage.textContent = "No hay sesion activa para esta placa.";
+      return;
+    }
     state.currentSession = body;
     renderSession(body);
     els.searchMessage.textContent = "Sesion activa encontrada.";
   } catch (error) {
     state.currentSession = null;
-    els.sessionCard.classList.add("hidden");
+    resetSessionView();
     els.searchMessage.textContent = error.message || "No se pudo consultar la sesion.";
   }
 }
@@ -141,8 +152,12 @@ async function registerPayment() {
       throw new Error(parseDetail(body.detail) || "No se pudo registrar el pago.");
     }
 
-    state.currentSession = body.session;
-    renderSession(body.session);
+    const refreshResponse = await fetch(gateway(`/payments/by-plate/${encodeURIComponent(payload.plate_text)}`), {
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    const refreshed = await refreshResponse.json();
+    state.currentSession = refreshed.found ? refreshed : body.session;
+    renderSession(state.currentSession);
     renderReceipt(body, payload.payment_method, payload.amount);
     els.paymentHint.textContent = "Pago registrado correctamente.";
   } catch (error) {
@@ -155,11 +170,25 @@ function renderSession(session) {
   els.sessionCard.classList.remove("hidden");
   els.sessionId.textContent = session.session_id;
   els.sessionPlate.textContent = session.plate_text;
+  els.sessionStatus.textContent = session.session_status || "-";
   els.entryTime.textContent = formatDateTime(session.entry_time);
   els.duration.textContent = `${session.duration_minutes} min`;
   els.amount.textContent = `${session.currency} ${Number(session.amount).toFixed(2)}`;
   els.paymentStatus.textContent = session.payment_status;
+  els.paidAt.textContent = formatDateTime(session.paid_at);
+  els.paidAmount.textContent =
+    session.paid_amount != null ? `${session.currency} ${Number(session.paid_amount).toFixed(2)}` : "-";
+  els.paymentValidUntil.textContent = formatDateTime(session.payment_valid_until);
+  els.receiptLabel.textContent = session.receipt_number || "-";
   els.amountInput.value = Number(session.amount).toFixed(2);
+  const alreadyPaid = session.payment_status === "PAID";
+  els.payBtn.disabled = alreadyPaid;
+  els.amountInput.disabled = alreadyPaid;
+  els.paymentMethod.disabled = alreadyPaid;
+  els.notesInput.disabled = alreadyPaid;
+  els.paymentHint.textContent = alreadyPaid
+    ? "Pago registrado. El monto quedo congelado y la salida sera valida hasta el tiempo de gracia."
+    : "Sesion pendiente. El monto se calcula hasta el momento de registrar el pago.";
 }
 
 function renderReceipt(response, paymentMethod, amount) {
@@ -175,6 +204,14 @@ function renderReceipt(response, paymentMethod, amount) {
 
 function hideReceipt() {
   els.receiptCard.classList.add("hidden");
+}
+
+function resetSessionView() {
+  els.sessionCard.classList.add("hidden");
+  els.payBtn.disabled = false;
+  els.amountInput.disabled = false;
+  els.paymentMethod.disabled = false;
+  els.notesInput.disabled = false;
 }
 
 function setStatus(message, isError = false) {
