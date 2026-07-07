@@ -2,34 +2,31 @@
 
 ## Objetivo
 
-Esta fase elimina la digitacion manual de placa para el operador normal. La aplicacion movil captura la imagen de la placa, la sube como evidencia, solicita deteccion automatica y usa el resultado para entrada o salida.
+Esta fase reemplaza la digitacion manual de la placa para el operador normal. La app movil captura la evidencia, la sube a MinIO y solicita a `plate-service` una deteccion automatica con pipeline ALPR.
 
 ## Flujo operativo
 
 1. El operador presiona `Capturar placa`.
-2. La app obtiene la imagen desde camara o galeria.
-3. La app sube la imagen mediante `POST /evidence/upload`.
-4. La app recibe `plate_image_id`.
-5. La app llama `POST /plates/detect`.
-6. `plate-service` busca la referencia de `image_id` en la base biometrica.
-7. `plate-service` descarga la imagen desde MinIO.
-8. `plate-service` ejecuta deteccion mock o preparada.
+2. La app muestra una guia visual para encuadrar la placa.
+3. La app toma la foto o permite seleccionarla.
+4. La imagen se sube con `POST /evidence/upload`.
+5. La app recibe `image_id`.
+6. La app llama `POST /plates/detect`.
+7. `plate-service` busca la referencia y descarga la imagen desde MinIO.
+8. El servicio evalua calidad, intenta detectar region de placa y luego ejecuta OCR.
 9. La app muestra:
    - placa detectada
    - confianza
+   - advertencias
    - candidatos
-   - estado de deteccion
-10. Si la confianza es suficiente, la placa detectada se usa en:
-   - `POST /parking/entry`
-   - `POST /parking/exit`
+10. Si la confianza es menor a `0.75`, la app bloquea la autorizacion automatica y exige `Reintentar captura`.
+11. Solo un operador de seguridad puede corregir la placa manualmente y debe registrar motivo para auditoria.
 
 ## Endpoint principal
 
 ### `POST /plates/detect`
 
-La app consume este endpoint a traves del `api-gateway`.
-
-Request recomendado:
+Request:
 
 ```json
 {
@@ -40,115 +37,186 @@ Request recomendado:
 }
 ```
 
-Response:
+Response cuando detecta:
 
 ```json
 {
+  "status": "DETECTED",
   "plate_text": "AGH430",
   "confidence": 0.91,
   "image_id": "d1ecb1d2-6a46-4a6f-9490-f6d831f2f2aa",
   "bounding_box": {
     "x": 120,
-    "y": 210,
-    "width": 260,
-    "height": 80
+    "y": 80,
+    "width": 300,
+    "height": 90
   },
   "candidates": [
-    {"text": "AGH430", "confidence": 0.91},
-    {"text": "A6H430", "confidence": 0.72}
+    {
+      "text": "AGH430",
+      "confidence": 0.91
+    },
+    {
+      "text": "A6H430",
+      "confidence": 0.72
+    }
   ],
-  "status": "DETECTED",
-  "mode": "mock",
+  "mode": "hybrid",
   "valid_format": true,
   "source": "minio",
-  "detector_provider": "mock-detector",
-  "ocr_provider": "mock-ocr"
+  "detector_provider": "yolo",
+  "ocr_provider": "easyocr",
+  "warnings": []
+}
+```
+
+Response cuando no detecta:
+
+```json
+{
+  "status": "NOT_DETECTED",
+  "plate_text": null,
+  "confidence": 0.0,
+  "image_id": "d1ecb1d2-6a46-4a6f-9490-f6d831f2f2aa",
+  "bounding_box": null,
+  "candidates": [],
+  "mode": "hybrid",
+  "valid_format": false,
+  "source": "minio",
+  "detector_provider": "none",
+  "ocr_provider": "easyocr",
+  "warnings": ["LOW_QUALITY_IMAGE", "PLATE_REGION_NOT_FOUND"]
 }
 ```
 
 ## Modos soportados
 
 - `PLATE_DETECTION_MODE=mock`
-  - usa un detector y OCR simulados;
-  - permite demos sin modelos pesados;
-  - puede derivar una placa desde nombres de archivo, contenido mock o un fallback controlado.
+  - conserva el comportamiento de demostracion;
+  - permite pruebas sin OpenCV, OCR ni modelo YOLO;
+  - puede devolver resultados simulados.
+
+- `PLATE_DETECTION_MODE=hybrid`
+  - es el modo recomendado por defecto;
+  - intenta usar YOLO si existe `backend/services/plate-service/models/plate_detector.pt`;
+  - si el modelo no existe, devuelve `MODEL_NOT_FOUND` y sigue con OCR sobre la imagen completa o el mejor recorte disponible;
+  - no inventa placas si no logra una lectura valida.
 
 - `PLATE_DETECTION_MODE=real`
-  - deja preparado el pipeline para YOLO + OCR;
-  - usa placeholders ligeros hasta integrar el runtime real.
+  - exige modelo YOLO disponible;
+  - si no encuentra el modelo, falla claramente con `MODEL_NOT_FOUND`;
+  - si la dependencia de YOLO no esta disponible, falla con `YOLO_NOT_AVAILABLE`.
 
-## Arquitectura interna
+## Pipeline interno
 
-La implementacion actual deja separado el flujo en piezas pequeñas:
+Estructura principal:
 
 - `routes/plates.py`
 - `schemas/plates.py`
-- `services/plate_detection_service.py`
-- `services/plate_detector.py`
-- `services/ocr_reader.py`
 - `services/minio_client.py`
+- `services/image_quality.py`
+- `services/plate_detector_yolo.py`
+- `services/plate_cropper.py`
+- `services/plate_preprocessor.py`
+- `services/ocr_reader.py`
 - `services/plate_normalizer.py`
-- `repositories/evidence_reference_repository.py`
+- `services/plate_service.py`
+- `models/plate_detector.pt`
 
-Funciones preparadas:
+Pasos del pipeline:
 
-- `download_image_from_minio(image_id)`
-- `detect_plate_region(image)`
-- `read_plate_text(image)`
-- `normalize_plate_text(text)`
-- `validate_plate_format(text)`
-- `detect_plate(...)`
+1. Descargar imagen desde MinIO por `image_id`.
+2. Evaluar calidad:
+   - resolucion
+   - nitidez
+   - brillo
+3. Detectar region de placa con YOLO cuando el modelo existe.
+4. Recortar la region detectada.
+5. Preprocesar con OpenCV:
+   - escala de grises
+   - ecualizacion de histograma
+   - reduccion de ruido
+   - umbral adaptativo
+   - Otsu
+6. Ejecutar OCR con `EasyOCR` y fallback a `PaddleOCR`.
+7. Normalizar texto.
+8. Validar patron de placa.
+9. Responder con candidatos, confianza y advertencias.
 
 ## Normalizacion aplicada
 
-La fase actual normaliza la placa con estas reglas:
+Reglas activas:
 
-- convierte a mayusculas;
-- elimina espacios y guiones;
-- corrige caracteres comunes en la parte esperada de letras o numeros;
-- valida formato ecuatoriano basico:
-  - `3 letras + 3 numeros`
-  - `3 letras + 4 numeros`
+- convertir a mayusculas;
+- quitar espacios, guiones y caracteres no alfanumericos;
+- conservar solo `A-Z` y `0-9`;
+- corregir ambiguedades comunes segun posicion:
+  - `0 -> O` en el bloque de letras
+  - `1 -> I` en el bloque de letras
+  - `5 -> S` en el bloque de letras
+  - `6 -> G` en el bloque de letras
+  - `8 -> B` en el bloque de letras
+  - `O -> 0` en el bloque numerico
+  - `I -> 1` en el bloque numerico
+  - `S -> 5` en el bloque numerico
+  - `G -> 6` en el bloque numerico
+  - `B -> 8` en el bloque numerico
 
-Ejemplos:
+Formato configurable por entorno:
 
-- `agh-430` -> `AGH430`
-- `AGO43O` -> `AGO430`
-- `a s h 1 2 3 4` -> `ASH1234`
+- `PLATE_PATTERN_REGEX=^[A-Z]{3}\\d{3,4}$`
 
 ## Reglas de la app movil
 
-- el operador normal no digita la placa;
-- el campo de placa se muestra en solo lectura;
-- si la deteccion no llega a `0.75`, la app bloquea entrada o salida automatica;
-- si falla la deteccion, la app ofrece `Reintentar captura`;
-- solo un operador cuyo usuario contenga `security` puede corregir manualmente la placa;
-- si hay correccion manual, se exige motivo y se envia al backend para auditoria.
+- el usuario normal no escribe la placa;
+- el campo de placa detectada es de solo lectura;
+- la captura muestra una guia visual para encuadrar la placa;
+- si `confidence < 0.75`, la app no permite entrada o salida automatica;
+- si no hay lectura valida, se muestra `Reintentar captura`;
+- solo seguridad puede corregir manualmente la placa;
+- la correccion manual exige motivo.
 
 ## Auditoria
 
-Cuando la app envia una correccion manual, `parking-service` registra en la metadata de auditoria:
+Cuando existe correccion manual, la app envia al backend:
 
 - `operator_username`
 - `plate_detected_text`
 - `plate_detection_confidence`
 - `plate_override_reason`
 
-Esto permite distinguir entre:
+`parking-service` conserva esos datos en auditoria para distinguir:
 
 - placa detectada automaticamente;
-- placa corregida manualmente por seguridad;
-- motivo declarado para la correccion.
+- placa corregida por seguridad;
+- motivo declarado de la correccion.
+
+## Logs operativos
+
+`plate-service` registra eventos utiles para depuracion:
+
+- `image_id` recibido
+- `object_name` descargado
+- tamano de imagen
+- `quality_score`
+- si se encontro `bounding_box`
+- texto OCR crudo
+- texto normalizado
+- confianza final
+- advertencias y causa de fallo
+
+## Dependencias del servicio
+
+- `opencv-python-headless`
+- `pillow`
+- `numpy`
+- `easyocr`
+- `ultralytics`
+
+`PaddleOCR` queda preparado como fallback opcional del lector OCR.
 
 ## Limitaciones actuales
 
-- la deteccion sigue en modo mock avanzado;
-- todavia no se ejecuta YOLO ni OCR real;
-- la correccion manual depende del nombre de usuario cargado en la app mock, no de RBAC real del backend.
-
-## Siguiente fase recomendada
-
-- integrar YOLO para deteccion de region;
-- integrar OCR real;
-- almacenar recortes de placa para revision manual;
-- agregar revision administrativa de candidatos y bounding box.
+- la precision real depende de la calidad de la foto y de la disponibilidad del modelo YOLO;
+- `hybrid` puede operar sin modelo, pero con menor precision al depender solo de OCR;
+- la politica de correccion manual en la app sigue siendo una proteccion de interfaz; la validacion fuerte por rol debe reforzarse tambien en backend.

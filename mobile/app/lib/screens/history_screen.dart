@@ -42,7 +42,7 @@ class HistoryScreen extends StatelessWidget {
                       Text('Estado: ${item.result.status}'),
                       if (item.plateDetection != null)
                         Text(
-                          'Deteccion placa: ${item.plateDetection!.plateText.isEmpty ? 'sin lectura' : item.plateDetection!.plateText} '
+                          'Deteccion placa: ${((item.plateDetection!.plateText ?? '').isEmpty) ? 'sin lectura' : (item.plateDetection!.plateText ?? 'sin lectura')} '
                           '(${(item.plateDetection!.confidence * 100).toStringAsFixed(0)}%)',
                         ),
                       Text('Hora: ${item.result.timestamp.toLocal()}'),

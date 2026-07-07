@@ -284,7 +284,7 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
       setState(() {
         _uploadedPlateEvidence = upload;
         _plateDetection = detection;
-        _plateController.text = detection.plateText;
+        _plateController.text = detection.plateText ?? '';
       });
       if (!detection.autoAccepted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -396,6 +396,45 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
         children: [
           Text('Captura y deteccion de placa', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.teal.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.teal.withOpacity(0.35)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Coloque la placa dentro del recuadro',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 220,
+                        height: 88,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.teal, width: 3),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           Text(_plateEvidence == null ? 'Sin evidencia seleccionada.' : '${_plateEvidence!.label} - ${_plateEvidence!.fileName}'),
           if (_uploadedPlateEvidence != null) ...[
             const SizedBox(height: 4),
@@ -460,9 +499,16 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Estado: ${_plateDetection!.status}'),
+                  Text('Placa detectada: ${_plateDetection!.plateText ?? 'Sin lectura valida'}'),
                   Text('Confianza: ${(_plateDetection!.confidence * 100).toStringAsFixed(0)}%'),
                   Text('Proveedor detector: ${_plateDetection!.detectorProvider}'),
                   Text('Proveedor OCR: ${_plateDetection!.ocrProvider}'),
+                  if (_plateDetection!.warnings.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text('Advertencias:', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 4),
+                    ..._plateDetection!.warnings.map((warning) => Text('- $warning')),
+                  ],
                   if (_plateDetection!.candidates.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text('Candidatos:', style: Theme.of(context).textTheme.titleSmall),

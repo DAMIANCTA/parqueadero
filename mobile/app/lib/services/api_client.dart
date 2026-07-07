@@ -133,11 +133,12 @@ class ApiClient {
     }
 
     final rawCandidates = (body['candidates'] as List? ?? const []);
+    final rawWarnings = (body['warnings'] as List? ?? const []);
     return PlateDetectionResult(
       imageId: body['image_id'] as String? ?? imageId,
-      plateText: body['plate_text'] as String? ?? '',
+      plateText: body['plate_text'] as String?,
       confidence: (body['confidence'] as num? ?? 0).toDouble(),
-      boundingBox: Map<String, dynamic>.from(body['bounding_box'] as Map? ?? const {}),
+      boundingBox: body['bounding_box'] is Map ? Map<String, dynamic>.from(body['bounding_box'] as Map) : null,
       candidates: rawCandidates
           .whereType<Map>()
           .map(
@@ -153,6 +154,7 @@ class ApiClient {
       source: body['source'] as String? ?? 'minio',
       detectorProvider: body['detector_provider'] as String? ?? 'unknown',
       ocrProvider: body['ocr_provider'] as String? ?? 'unknown',
+      warnings: rawWarnings.map((item) => item.toString()).toList(),
       detectedAt: DateTime.now(),
     );
   }

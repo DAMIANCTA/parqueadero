@@ -229,15 +229,16 @@ class PlateDetectionResult {
     required this.source,
     required this.detectorProvider,
     required this.ocrProvider,
+    required this.warnings,
     required this.detectedAt,
   });
 
   static const double minimumAutoAcceptance = 0.75;
 
   final String imageId;
-  final String plateText;
+  final String? plateText;
   final double confidence;
-  final Map<String, dynamic> boundingBox;
+  final Map<String, dynamic>? boundingBox;
   final List<PlateCandidateResult> candidates;
   final String status;
   final String mode;
@@ -245,9 +246,10 @@ class PlateDetectionResult {
   final String source;
   final String detectorProvider;
   final String ocrProvider;
+  final List<String> warnings;
   final DateTime detectedAt;
 
-  bool get detected => status == 'DETECTED' && plateText.isNotEmpty;
+  bool get detected => status == 'DETECTED' && (plateText?.isNotEmpty ?? false);
   bool get autoAccepted => detected && confidence >= minimumAutoAcceptance;
 }
 

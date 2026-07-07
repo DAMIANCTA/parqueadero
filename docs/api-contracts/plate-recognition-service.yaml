@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Plate Recognition Service
-  version: 0.2.0
+  version: 0.3.0
 paths:
   /plates/detect:
     post:
@@ -60,19 +60,19 @@ paths:
                 type: object
                 required:
                   - image_id
-                  - plate_text
                   - confidence
-                  - bounding_box
                   - candidates
                   - status
                   - mode
                   - valid_format
                   - source
+                  - warnings
                 properties:
                   image_id:
                     type: string
                   plate_text:
                     type: string
+                    nullable: true
                   confidence:
                     type: number
                     format: float
@@ -81,7 +81,7 @@ paths:
                     enum: [DETECTED, LOW_CONFIDENCE, NOT_DETECTED]
                   mode:
                     type: string
-                    enum: [mock, real]
+                    enum: [mock, hybrid, real]
                   valid_format:
                     type: boolean
                   source:
@@ -93,6 +93,7 @@ paths:
                     type: string
                   bounding_box:
                     type: object
+                    nullable: true
                     properties:
                       x:
                         type: integer
@@ -112,3 +113,7 @@ paths:
                         confidence:
                           type: number
                           format: float
+                  warnings:
+                    type: array
+                    items:
+                      type: string

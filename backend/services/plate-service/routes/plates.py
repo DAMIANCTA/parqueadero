@@ -1,28 +1,28 @@
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 from minio.error import S3Error
 
+from config import settings
 from schemas.plates import PlateDetectRequest, PlateDetectResponse
 from security import require_permissions
-from services.image_source_service import ImageSourceService
-from services.plate_detection_service import PlateDetectionService
+from services.plate_service import PlateService
 
 
 router = APIRouter(tags=["plates"])
-image_source_service = ImageSourceService()
-plate_detection_service = PlateDetectionService()
+plate_service = PlateService()
 
 
 @router.post("/plates/detect", response_model=PlateDetectResponse, dependencies=[require_permissions("plates.detect")])
 async def detect_plate(request: Request) -> PlateDetectResponse:
     content_type = request.headers.get("content-type", "").lower()
+    response_source = "minio"
 
     try:
         if content_type.startswith("application/json"):
             payload = PlateDetectRequest(**await request.json())
-            loaded_image = image_source_service.load_from_minio(
+            outcome = plate_service.detect_plate(
                 image_id=payload.plate_image_id or payload.image_id,
+                country_code=payload.country_code,
             )
-            country_code = payload.country_code
         else:
             form = await request.form()
             image = form.get("image")
@@ -39,41 +39,48 @@ async def detect_plate(request: Request) -> PlateDetectResponse:
                 raise HTTPException(status_code=400, detail="Provide an upload image or an image_id reference")
 
             if using_upload:
+                response_source = "upload"
                 if not image.filename:
                     raise HTTPException(status_code=400, detail="Image filename is required")
                 content = await image.read()
                 if not content:
                     raise HTTPException(status_code=400, detail="Image content is empty")
-                loaded_image = image_source_service.load_from_upload(
-                    filename=image.filename,
-                    content_type=image.content_type or "application/octet-stream",
-                    content=content,
+                outcome = plate_service.detect_plate(
                     image_id=image_id,
+                    upload_bytes=content,
+                    upload_filename=image.filename,
+                    upload_content_type=image.content_type or "application/octet-stream",
+                    country_code=country_code,
                 )
             else:
-                loaded_image = image_source_service.load_from_minio(
+                outcome = plate_service.detect_plate(
                     image_id=image_id,
                     bucket=bucket,
                     object_name=object_name,
+                    country_code=country_code,
                 )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except S3Error as exc:
         raise HTTPException(status_code=404, detail=f"MinIO object not found: {exc.code}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    if not loaded_image.content:
-        raise HTTPException(status_code=400, detail="Image content is empty")
-
-    return plate_detection_service.detect_plate(
-        image_id=loaded_image.image_id,
-        filename=loaded_image.filename,
-        content_type=loaded_image.content_type,
-        content=loaded_image.content,
-        source=loaded_image.source,
-        country_code=country_code,
-        object_name=loaded_image.object_name,
+    return PlateDetectResponse(
+        image_id=outcome.image_id,
+        plate_text=outcome.plate_text,
+        confidence=outcome.confidence,
+        bounding_box=outcome.bounding_box,
+        candidates=outcome.candidates,
+        status=outcome.status,
+        mode=settings.effective_plate_detection_mode,
+        valid_format=outcome.valid_format,
+        source=response_source,
+        detector_provider=outcome.detector_provider,
+        ocr_provider=outcome.ocr_provider,
+        warnings=outcome.warnings,
     )
 
 

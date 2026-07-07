@@ -38,3 +38,25 @@ class OcrCandidate:
     confidence: float
     provider: str
     candidates: list[PlateTextCandidate] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ImageQualityResult:
+    width: int
+    height: int
+    quality_score: float
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class PlateDetectionOutcome:
+    status: str
+    plate_text: str | None
+    confidence: float
+    image_id: str
+    bounding_box: dict | None
+    candidates: list[PlateTextCandidate] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    valid_format: bool = False
+    detector_provider: str = "none"
+    ocr_provider: str = "none"

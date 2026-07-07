@@ -29,9 +29,9 @@ class PlateCandidateResponse(BaseModel):
 
 class PlateDetectResponse(BaseModel):
     image_id: str
-    plate_text: str
+    plate_text: str | None = None
     confidence: float = Field(ge=0, le=1)
-    bounding_box: BoundingBox
+    bounding_box: BoundingBox | None = None
     candidates: list[PlateCandidateResponse] = Field(default_factory=list)
     status: PlateDetectionStatus
     mode: str
@@ -39,3 +39,4 @@ class PlateDetectResponse(BaseModel):
     source: str
     detector_provider: str
     ocr_provider: str
+    warnings: list[str] = Field(default_factory=list)

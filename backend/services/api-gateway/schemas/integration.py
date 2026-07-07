@@ -134,13 +134,14 @@ class PlateCandidateResponse(BaseModel):
 
 class PlateDetectResponse(BaseModel):
     image_id: str
-    plate_text: str
+    plate_text: str | None = None
     confidence: float = Field(ge=0, le=1)
-    bounding_box: dict
-    candidates: list[PlateCandidateResponse]
+    bounding_box: dict | None = None
+    candidates: list[PlateCandidateResponse] = Field(default_factory=list)
     status: str
     mode: str
     valid_format: bool
     source: str
     detector_provider: str
     ocr_provider: str
+    warnings: list[str] = Field(default_factory=list)

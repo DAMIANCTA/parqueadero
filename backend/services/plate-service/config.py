@@ -6,10 +6,16 @@ class Settings(BaseSettings):
     service_version: str = "0.1.0"
     environment: str = "local"
     plate_service_mode: str = "mock"
-    plate_detection_mode: str = ""
+    plate_detection_mode: str = "hybrid"
     plate_default_country_code: str = "EC"
     plate_min_confidence: float = 0.70
     plate_auto_accept_confidence: float = 0.75
+    plate_pattern_regex: str = r"^[A-Z]{3}\d{3,4}$"
+    plate_detector_model_path: str = "models/plate_detector.pt"
+    plate_ocr_preferred_engine: str = "easyocr"
+    plate_quality_min_width: int = 640
+    plate_quality_min_height: int = 360
+    plate_quality_min_score: float = 0.45
     minio_internal_url: str = "http://minio:9000"
     minio_root_user: str = "minioadmin"
     minio_root_password: str = "minioadmin123"
