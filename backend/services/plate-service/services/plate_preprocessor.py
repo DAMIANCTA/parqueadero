@@ -1,5 +1,7 @@
 from typing import Any
 
+from config import settings
+
 
 class PlatePreprocessor:
     def create_variants(self, image_bgr: Any) -> list[tuple[str, Any]]:
@@ -9,22 +11,27 @@ class PlatePreprocessor:
         try:
             import cv2  # type: ignore
 
-            gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-            denoised = cv2.bilateralFilter(gray, 7, 50, 50)
-            equalized = cv2.equalizeHist(denoised)
-            adaptive = cv2.adaptiveThreshold(
-                equalized,
-                255,
-                cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                cv2.THRESH_BINARY,
-                31,
-                11,
-            )
-            _, otsu = cv2.threshold(equalized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            working = image_bgr
+            _, width = working.shape[:2]
+            if width > 0 and width > settings.plate_preprocess_max_width:
+                scale = settings.plate_preprocess_max_width / width
+                working = cv2.resize(
+                    working,
+                    None,
+                    fx=scale,
+                    fy=scale,
+                    interpolation=cv2.INTER_AREA,
+                )
+
+            gray = cv2.cvtColor(working, cv2.COLOR_BGR2GRAY)
+            denoised = cv2.bilateralFilter(gray, 5, 50, 50)
+            resize_factor = max(settings.plate_preprocess_resize_factor, 1.0)
+            resized = cv2.resize(gray, None, fx=resize_factor, fy=resize_factor, interpolation=cv2.INTER_LINEAR)
+            resized_denoised = cv2.bilateralFilter(resized, 5, 50, 50)
+            _, otsu = cv2.threshold(resized_denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
             return [
                 ("gray", gray),
-                ("equalized", equalized),
-                ("adaptive", adaptive),
+                ("resized_denoised", resized_denoised),
                 ("otsu", otsu),
             ]
         except Exception:

@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     audit_enabled: bool = True
     audit_service_url: str = "http://audit-service:8000"
     audit_internal_key: str = ""
+    downstream_default_timeout_seconds: float = 10.0
+    downstream_plate_timeout_seconds: float = 180.0
+    downstream_evidence_timeout_seconds: float = 20.0
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

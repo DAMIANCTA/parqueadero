@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/app_models.dart';
 import '../services/api_client.dart';
+import '../services/image_preparation_service.dart';
 import '../state/parking_app_scope.dart';
 import 'result_screen.dart';
 
@@ -23,6 +24,7 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
   static const String _pendingPlatePlaceholder = 'TMP000';
 
   final ApiClient _apiClient = ApiClient();
+  final ImagePreparationService _imagePreparationService = const ImagePreparationService();
   final ImagePicker _picker = ImagePicker();
   final TextEditingController _plateController = TextEditingController();
   final TextEditingController _manualPlateController = TextEditingController();
@@ -221,13 +223,9 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
       if (file == null) {
         return;
       }
-      final bytes = await file.readAsBytes();
-      final draft = LocalEvidenceDraft(
+      final draft = await _imagePreparationService.buildDraft(
+        file: file,
         label: source == ImageSource.camera ? 'Capturada' : 'Seleccionada',
-        fileName: file.name,
-        bytes: bytes,
-        contentType: 'image/jpeg',
-        isMock: false,
       );
       _setEvidenceDraft(isFace: true, draft: draft);
     } catch (_) {
@@ -314,15 +312,7 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
           return;
         }
         for (final file in files.take(3)) {
-          drafts.add(
-            LocalEvidenceDraft(
-              label: 'Seleccionada',
-              fileName: file.name,
-              bytes: await file.readAsBytes(),
-              contentType: 'image/jpeg',
-              isMock: false,
-            ),
-          );
+          drafts.add(await _imagePreparationService.buildDraft(file: file, label: 'Seleccionada'));
         }
       } else {
         for (var index = 0; index < 3; index++) {
@@ -331,12 +321,9 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
             break;
           }
           drafts.add(
-            LocalEvidenceDraft(
+            await _imagePreparationService.buildDraft(
+              file: file,
               label: source == ImageSource.camera ? 'Capturada ${index + 1}' : 'Seleccionada ${index + 1}',
-              fileName: file.name,
-              bytes: await file.readAsBytes(),
-              contentType: 'image/jpeg',
-              isMock: false,
             ),
           );
         }

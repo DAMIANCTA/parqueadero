@@ -89,10 +89,12 @@ def _select_ocr_engine(
     }
     if availability.get(preferred):
         return preferred
+    if preferred in availability:
+        return "none"
 
     for engine_name, available in (
-        ("easyocr", easyocr_available),
         ("rapidocr", rapidocr_available),
+        ("easyocr", easyocr_available),
         ("paddleocr", paddleocr_available),
     ):
         if available:

@@ -141,6 +141,7 @@ services:
     ports:
       - "${PLATE_SERVICE_PORT}:8000"
     depends_on:
+      - postgres-biometrics
       - minio
 
   payment-service:

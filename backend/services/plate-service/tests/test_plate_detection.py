@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 from config import settings
 from services.plate_models import PlateDetectionOutcome, PlateTextCandidate
+from services.ocr_reader import OCRReaderService
+from services.runtime_probe import RuntimeCapabilities
 from services.plate_service import PlateService
 
 
@@ -18,6 +20,83 @@ class PlateDetectionTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         settings.plate_detection_mode = self.original_mode
+
+    def test_ocr_reader_prefers_rapidocr_without_trying_easyocr(self) -> None:
+        original_engine = settings.plate_ocr_preferred_engine
+        settings.plate_ocr_preferred_engine = "rapidocr"
+        reader = OCRReaderService()
+        capabilities = RuntimeCapabilities(
+            opencv_available=True,
+            easyocr_available=False,
+            rapidocr_available=True,
+            paddleocr_available=False,
+            ocr_engine="rapidocr",
+            model_path="models/plate_detector.pt",
+            model_exists=True,
+            plate_detection_mode="hybrid",
+            plate_service_mode="hybrid",
+            environment="local",
+            min_confidence=0.70,
+            errors={"easyocr": "No module named 'easyocr'"},
+        )
+
+        try:
+            with patch("services.ocr_reader.probe_runtime_capabilities", return_value=capabilities), patch.object(
+                reader,
+                "_read_with_easyocr",
+                side_effect=AssertionError("EasyOCR should not be used when rapidocr is preferred"),
+            ), patch.object(
+                reader,
+                "_read_with_paddleocr",
+                side_effect=AssertionError("PaddleOCR should not be used when rapidocr is preferred"),
+            ), patch.object(
+                reader,
+                "_read_with_rapidocr",
+                return_value=([PlateTextCandidate(text="AGH430", confidence=0.91)], "rapidocr"),
+            ):
+                candidates, warnings, provider, selected_engine = reader.read_plate_text([("raw", object())])
+
+            self.assertEqual(selected_engine, "rapidocr")
+            self.assertEqual(provider, "rapidocr")
+            self.assertEqual(candidates[0].text, "AGH430")
+            self.assertNotIn("OCR_ENGINE_FAILED", warnings)
+        finally:
+            settings.plate_ocr_preferred_engine = original_engine
+
+    def test_ocr_reader_returns_warning_without_exception_when_preferred_engine_fails(self) -> None:
+        original_engine = settings.plate_ocr_preferred_engine
+        settings.plate_ocr_preferred_engine = "rapidocr"
+        reader = OCRReaderService()
+        capabilities = RuntimeCapabilities(
+            opencv_available=True,
+            easyocr_available=False,
+            rapidocr_available=True,
+            paddleocr_available=False,
+            ocr_engine="rapidocr",
+            model_path="models/plate_detector.pt",
+            model_exists=True,
+            plate_detection_mode="hybrid",
+            plate_service_mode="hybrid",
+            environment="local",
+            min_confidence=0.70,
+            errors={},
+        )
+
+        try:
+            with patch("services.ocr_reader.probe_runtime_capabilities", return_value=capabilities), patch.object(
+                reader,
+                "_read_with_rapidocr",
+                side_effect=RuntimeError("rapidocr crashed"),
+            ):
+                candidates, warnings, provider, selected_engine = reader.read_plate_text([("raw", object())])
+
+            self.assertEqual(selected_engine, "rapidocr")
+            self.assertEqual(provider, "none")
+            self.assertEqual(candidates, [])
+            self.assertIn("OCR_ENGINE_FAILED", warnings)
+            self.assertNotIn("OCR_ENGINE_NOT_AVAILABLE", warnings)
+        finally:
+            settings.plate_ocr_preferred_engine = original_engine
 
     def test_mock_mode_detects_plate_from_simulated_image_upload(self) -> None:
         settings.plate_detection_mode = "mock"

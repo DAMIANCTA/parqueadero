@@ -3,6 +3,7 @@ import logging
 from fastapi import FastAPI
 
 from config import settings
+from routes.plates import plate_service
 from routes.plates import router as plates_router
 from routes.system import router
 from security import AuditLogMiddleware, AuthenticationMiddleware, RateLimitMiddleware
@@ -62,3 +63,5 @@ async def log_runtime_configuration() -> None:
     if capabilities.errors:
         for component, error in capabilities.errors.items():
             logger.warning("plate-service runtime dependency_unavailable component=%s error=%s", component, error)
+    warmed_up = plate_service.warm_up()
+    logger.info("plate-service startup yolo_warmup=%s", warmed_up)

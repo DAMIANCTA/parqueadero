@@ -41,6 +41,19 @@ class PlateService:
         self.mock_detector = MockPlateDetector()
         self.mock_ocr = MockPlateOcr()
 
+    def warm_up(self) -> bool:
+        if settings.effective_plate_detection_mode == "mock":
+            return False
+        detector_ready = self.detector_service.warm_up()
+        ocr_ready = self.ocr_reader.warm_up()
+        logger.info(
+            "plate_service warmup detector_ready=%s ocr_ready=%s preferred_ocr_engine=%s",
+            detector_ready,
+            ocr_ready,
+            settings.plate_ocr_preferred_engine,
+        )
+        return detector_ready or ocr_ready
+
     def detect_plate(
         self,
         *,
@@ -90,12 +103,15 @@ class PlateService:
             self._log_outcome(image, outcome, quality_score=quality.quality_score)
             return outcome
 
-        detection, detector_warnings = self._detect_region(image_bgr)
+        detection, detector_warnings, detections_count = self._detect_region(image_bgr)
         warnings = list(dict.fromkeys([*quality.warnings, *detector_warnings]))
         logger.info(
-            "plate_detect image_id=%s bounding_box_found=%s detector_warnings=%s",
+            "plate_detect image_id=%s preferred_ocr_engine=%s yolo_detections_count=%s bounding_box_found=%s selected_bounding_box=%s detector_warnings=%s",
             image.image_id,
+            settings.plate_ocr_preferred_engine,
+            detections_count,
             detection is not None,
+            self._to_bbox(detection),
             detector_warnings,
         )
 
@@ -116,15 +132,24 @@ class PlateService:
             return outcome
 
         variants = self.preprocessor.create_variants(crop_source)
-        ocr_candidates, ocr_warnings, ocr_provider = self.ocr_reader.read_plate_text(variants)
+        ocr_candidates, ocr_warnings, ocr_provider, selected_ocr_engine = self.ocr_reader.read_plate_text(variants)
         warnings.extend(ocr_warnings)
         logger.info(
-            "plate_detect image_id=%s ocr_raw=%s",
+            "plate_detect image_id=%s preferred_ocr_engine=%s selected_ocr_engine=%s actual_ocr_engine_used=%s ocr_raw=%s",
             image.image_id,
+            settings.plate_ocr_preferred_engine,
+            selected_ocr_engine,
+            ocr_provider,
             [candidate.text for candidate in ocr_candidates],
         )
 
         normalized_candidates = self._normalize_candidates(ocr_candidates)
+        logger.info(
+            "plate_detect image_id=%s normalized_plate_candidates=%s warnings=%s",
+            image.image_id,
+            [candidate.text for candidate in normalized_candidates],
+            self._unique(warnings),
+        )
         if not normalized_candidates:
             warnings.append("OCR_NO_TEXT")
             outcome = PlateDetectionOutcome(
@@ -294,15 +319,15 @@ class PlateService:
             ocr_provider=ocr_result.provider,
         )
 
-    def _detect_region(self, image_bgr: Any) -> tuple[DetectionCandidate | None, list[str]]:
+    def _detect_region(self, image_bgr: Any) -> tuple[DetectionCandidate | None, list[str], int]:
         mode = settings.effective_plate_detection_mode
-        detection, warnings = self.detector_service.detect_plate_region(image_bgr)
+        detection, warnings, detections_count = self.detector_service.detect_plate_region(image_bgr)
         if mode == "real":
             if "MODEL_NOT_FOUND" in warnings:
                 raise RuntimeError("MODEL_NOT_FOUND")
             if "YOLO_NOT_AVAILABLE" in warnings:
                 raise RuntimeError("YOLO_NOT_AVAILABLE")
-        return detection, warnings
+        return detection, warnings, detections_count
 
     def _normalize_candidates(self, raw_candidates: list[PlateTextCandidate]) -> list[PlateTextCandidate]:
         normalized: list[PlateTextCandidate] = []

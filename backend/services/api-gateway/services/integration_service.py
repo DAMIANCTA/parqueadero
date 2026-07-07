@@ -27,6 +27,9 @@ class DownstreamTarget:
 class IntegrationService:
     def __init__(self) -> None:
         self.http_timeout = 2.0
+        self.default_downstream_timeout = settings.downstream_default_timeout_seconds
+        self.plate_downstream_timeout = settings.downstream_plate_timeout_seconds
+        self.evidence_downstream_timeout = settings.downstream_evidence_timeout_seconds
         self.targets = {
             "parking": DownstreamTarget(name="parking-service", base_url=settings.parking_service_url.rstrip("/")),
             "face": DownstreamTarget(name="face-service", base_url=settings.face_service_url.rstrip("/")),
@@ -119,6 +122,7 @@ class IntegrationService:
             "/plates/detect",
             payload.model_dump(),
             permissions=["plates.detect"],
+            timeout_seconds=self.plate_downstream_timeout,
         )
 
     def proxy_plate_detection_batch(self, payload: PlateDetectBatchRequest) -> dict:
@@ -127,6 +131,7 @@ class IntegrationService:
             "/plates/detect-batch",
             payload.model_dump(),
             permissions=["plates.detect"],
+            timeout_seconds=self.plate_downstream_timeout,
         )
 
     def proxy_evidence_upload(
@@ -153,7 +158,7 @@ class IntegrationService:
         }
         if session_id:
             data["session_id"] = session_id
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=self._build_timeout(self.evidence_downstream_timeout)) as client:
             response = client.post(
                 f"{self.targets['parking'].base_url}/evidence/upload",
                 data=data,
@@ -225,9 +230,10 @@ class IntegrationService:
         payload: dict,
         *,
         permissions: list[str],
+        timeout_seconds: float | None = None,
     ) -> dict:
         token = self._build_internal_token(permissions)
-        with httpx.Client(timeout=5.0) as client:
+        with httpx.Client(timeout=self._build_timeout(timeout_seconds or self.default_downstream_timeout)) as client:
             response = client.post(
                 f"{target.base_url}{path}",
                 json=payload,
@@ -238,6 +244,9 @@ class IntegrationService:
             )
         response.raise_for_status()
         return response.json()
+
+    def _build_timeout(self, seconds: float) -> httpx.Timeout:
+        return httpx.Timeout(timeout=seconds, connect=min(seconds, 5.0))
 
     def _build_internal_token(self, permissions: list[str]) -> str:
         return encode_access_token(

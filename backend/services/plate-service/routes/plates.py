@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 from minio.error import S3Error
+from psycopg import OperationalError
 
 from config import settings
 from schemas.plates import PlateDetectBatchRequest, PlateDetectBatchResponse, PlateDetectRequest, PlateDetectResponse
@@ -63,6 +64,8 @@ async def detect_plate(request: Request) -> PlateDetectResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except S3Error as exc:
         raise HTTPException(status_code=404, detail=f"MinIO object not found: {exc.code}") from exc
+    except OperationalError as exc:
+        raise HTTPException(status_code=503, detail="BIOMETRIC_DB_UNAVAILABLE") from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
@@ -95,6 +98,8 @@ async def detect_plate_batch(payload: PlateDetectBatchRequest) -> PlateDetectBat
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except S3Error as exc:
         raise HTTPException(status_code=404, detail=f"MinIO object not found: {exc.code}") from exc
+    except OperationalError as exc:
+        raise HTTPException(status_code=503, detail="BIOMETRIC_DB_UNAVAILABLE") from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
