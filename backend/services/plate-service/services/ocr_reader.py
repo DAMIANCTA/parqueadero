@@ -1,8 +1,13 @@
 from abc import ABC, abstractmethod
+import logging
 from typing import Any
 
 from services.plate_models import DetectionCandidate, OcrCandidate, PlateImage
 from services.plate_models import PlateTextCandidate
+from services.runtime_probe import probe_runtime_capabilities
+
+
+logger = logging.getLogger(__name__)
 
 
 class OcrReader(ABC):
@@ -15,27 +20,39 @@ class OCRReaderService:
     def read_plate_text(self, image_variants: list[tuple[str, Any]]) -> tuple[list[PlateTextCandidate], list[str], str]:
         warnings: list[str] = []
         candidates: list[PlateTextCandidate] = []
-
         provider = "none"
-        easyocr_error: Exception | None = None
-        try:
-            easyocr_candidates, provider = self._read_with_easyocr(image_variants)
-            candidates.extend(easyocr_candidates)
-        except Exception as exc:  # pragma: no cover - runtime dependency path
-            easyocr_error = exc
+
+        capabilities = probe_runtime_capabilities()
+        if not capabilities.easyocr_available:
             warnings.append("EASYOCR_NOT_AVAILABLE")
-
-        if candidates:
-            return candidates, warnings, provider
-
-        try:
-            paddle_candidates, provider = self._read_with_paddleocr(image_variants)
-            candidates.extend(paddle_candidates)
-            warnings = [warning for warning in warnings if warning != "EASYOCR_NOT_AVAILABLE"]
-        except Exception:  # pragma: no cover - runtime dependency path
+            logger.warning("ocr_reader dependency_unavailable engine=easyocr error=%s", capabilities.errors.get("easyocr", "unknown"))
+        if not capabilities.rapidocr_available:
+            warnings.append("RAPIDOCR_NOT_AVAILABLE")
+            logger.warning("ocr_reader dependency_unavailable engine=rapidocr error=%s", capabilities.errors.get("rapidocr", "unknown"))
+        if not capabilities.paddleocr_available:
             warnings.append("PADDLEOCR_NOT_AVAILABLE")
+            logger.warning("ocr_reader dependency_unavailable engine=paddleocr error=%s", capabilities.errors.get("paddleocr", "unknown"))
 
-        if not candidates and easyocr_error is not None:
+        for reader_name, reader in (
+            ("easyocr", self._read_with_easyocr),
+            ("rapidocr", self._read_with_rapidocr),
+            ("paddleocr", self._read_with_paddleocr),
+        ):
+            try:
+                reader_candidates, provider = reader(image_variants)
+                if reader_candidates:
+                    candidates.extend(reader_candidates)
+                    break
+            except Exception as exc:  # pragma: no cover - runtime dependency path
+                logger.warning("ocr_reader engine_failed engine=%s error=%s", reader_name, exc)
+                if reader_name == "easyocr":
+                    warnings.append("EASYOCR_NOT_AVAILABLE")
+                elif reader_name == "rapidocr":
+                    warnings.append("RAPIDOCR_NOT_AVAILABLE")
+                else:
+                    warnings.append("PADDLEOCR_NOT_AVAILABLE")
+
+        if not candidates:
             warnings.append("OCR_ENGINE_NOT_AVAILABLE")
 
         return candidates, self._unique(warnings), provider
@@ -57,6 +74,25 @@ class OCRReaderService:
                     )
                 )
         return candidates, "easyocr"
+
+    def _read_with_rapidocr(self, image_variants: list[tuple[str, Any]]) -> tuple[list[PlateTextCandidate], str]:
+        from rapidocr_onnxruntime import RapidOCR  # type: ignore
+
+        engine = RapidOCR()
+        candidates: list[PlateTextCandidate] = []
+        for _, variant in image_variants:
+            result, _ = engine(variant)
+            for item in result or []:
+                if len(item) < 3:
+                    continue
+                _, text, confidence = item
+                candidates.append(
+                    PlateTextCandidate(
+                        text=str(text),
+                        confidence=float(confidence or 0.0),
+                    )
+                )
+        return candidates, "rapidocr"
 
     def _read_with_paddleocr(self, image_variants: list[tuple[str, Any]]) -> tuple[list[PlateTextCandidate], str]:
         from paddleocr import PaddleOCR  # type: ignore

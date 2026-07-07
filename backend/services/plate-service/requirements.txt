@@ -8,5 +8,7 @@ psycopg[binary]>=3.2,<4.0
 opencv-python-headless>=4.10,<5.0
 pillow>=10.4,<12.0
 numpy>=1.26,<3.0
-easyocr>=1.7,<2.0
+# EasyOCR remains supported by the service code, but Docker uses RapidOCR by default
+# because recent torch wheels can make container builds too heavy and unstable.
+rapidocr-onnxruntime>=1.3,<2.0
 ultralytics>=8.2,<9.0

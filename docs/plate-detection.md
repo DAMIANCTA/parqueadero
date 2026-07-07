@@ -181,7 +181,10 @@ Pasos del pipeline:
    - reduccion de ruido
    - umbral adaptativo
    - Otsu
-6. Ejecutar OCR con `EasyOCR` y fallback a `PaddleOCR`.
+6. Ejecutar OCR con este orden de fallback:
+   - `EasyOCR`
+   - `RapidOCR`
+   - `PaddleOCR`
 7. Normalizar texto.
 8. Validar patron de placa.
 9. Responder con candidatos, confianza y advertencias.
@@ -259,9 +262,42 @@ Cuando existe correccion manual, la app envia al backend:
 - `pillow`
 - `numpy`
 - `easyocr`
+- `rapidocr-onnxruntime`
 - `ultralytics`
 
-`PaddleOCR` queda preparado como fallback opcional del lector OCR.
+En Docker local, `RapidOCR` es la opcion mas liviana y estable para dejar al menos un OCR funcional sin depender de una descarga pesada de `torch`. `EasyOCR` sigue soportado por el codigo y puede habilitarse despues si el entorno lo soporta bien.
+
+## Endpoint de diagnostico local
+
+Cuando `ENVIRONMENT=local`, `plate-service` expone:
+
+- `GET /plates/config`
+
+Este endpoint no requiere token en entorno local y sirve para confirmar rapidamente:
+
+- si `cv2` esta disponible;
+- si `EasyOCR`, `RapidOCR` o `PaddleOCR` estan instalados;
+- que modo esta activo;
+- que ruta de modelo se esta usando;
+- si el archivo del modelo realmente existe.
+
+Respuesta esperada:
+
+```json
+{
+  "environment": "local",
+  "plate_service_mode": "hybrid",
+  "plate_detection_mode": "hybrid",
+  "opencv_available": true,
+  "easyocr_available": true,
+  "rapidocr_available": true,
+  "paddleocr_available": false,
+  "ocr_engine": "easyocr",
+  "model_path": "models/plate_detector.pt",
+  "model_exists": false,
+  "min_confidence": 0.7
+}
+```
 
 ## Limitaciones actuales
 

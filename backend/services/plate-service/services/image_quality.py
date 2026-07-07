@@ -1,8 +1,12 @@
 from io import BytesIO
+import logging
 from math import exp
 
 from config import settings
 from services.plate_models import ImageQualityResult
+
+
+logger = logging.getLogger(__name__)
 
 
 class ImageQualityService:
@@ -38,7 +42,9 @@ class ImageQualityService:
                 resolution_score = min(1.0, (width * height) / float(settings.plate_quality_min_width * settings.plate_quality_min_height))
                 quality_score = max(0.0, min(1.0, resolution_score))
                 warnings.append("OPENCV_NOT_AVAILABLE")
+                logger.warning("image_quality fallback_to_pillow reason=opencv_not_available")
             except Exception:
+                logger.exception("image_quality invalid_image unable_to_decode")
                 return ImageQualityResult(width=0, height=0, quality_score=0.0, warnings=["INVALID_IMAGE"])
 
         if width < settings.plate_quality_min_width or height < settings.plate_quality_min_height:
