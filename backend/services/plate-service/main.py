@@ -10,6 +10,15 @@ from security import AuditLogMiddleware, AuthenticationMiddleware, RateLimitMidd
 from services.runtime_probe import probe_runtime_capabilities
 
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:%(name)s:%(message)s",
+    force=True,
+)
+logging.getLogger().setLevel(logging.INFO)
+logging.getLogger("services").setLevel(logging.INFO)
+logging.getLogger("repositories").setLevel(logging.INFO)
+
 app = FastAPI(title=settings.service_name, version=settings.service_version)
 logger = logging.getLogger(__name__)
 public_paths = {"/health", "/version"}
@@ -45,12 +54,14 @@ app.include_router(plates_router)
 async def log_runtime_configuration() -> None:
     capabilities = probe_runtime_capabilities()
     logger.info(
-        "plate-service startup environment=%s plate_service_mode=%s plate_detection_mode=%s model_path=%s model_exists=%s",
+        "plate-service startup environment=%s plate_service_mode=%s plate_detection_mode=%s model_path=%s model_exists=%s plate_detector_confidence=%.2f debug_output_dir=%s",
         capabilities.environment,
         capabilities.plate_service_mode,
         capabilities.plate_detection_mode,
         capabilities.model_path,
         capabilities.model_exists,
+        settings.plate_detector_confidence,
+        settings.plate_debug_output_dir,
     )
     logger.info(
         "plate-service runtime opencv_available=%s easyocr_available=%s rapidocr_available=%s paddleocr_available=%s selected_ocr_engine=%s",

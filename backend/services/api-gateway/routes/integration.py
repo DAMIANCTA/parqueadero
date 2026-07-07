@@ -2,6 +2,9 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 import httpx
 
 from schemas.integration import (
+    CashierPaymentLookupResponse,
+    CashierPaymentRegistrationRequest,
+    CashierPaymentRegistrationResponse,
     DemoOpenGateRequest,
     DemoOpenGateResponse,
     EvidenceUploadResponse,
@@ -15,6 +18,7 @@ from schemas.integration import (
     PaymentByPlateRequest,
     PaymentByPlateResponse,
 )
+from security import require_permissions
 from services.integration_service import IntegrationService
 
 
@@ -64,6 +68,32 @@ def pay_by_plate(payload: PaymentByPlateRequest) -> PaymentByPlateResponse:
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Payment service unavailable: {exc}") from exc
     return PaymentByPlateResponse(**response)
+
+
+@router.get("/payments/by-plate/{plate_text}", response_model=CashierPaymentLookupResponse)
+def get_payment_by_plate(plate_text: str) -> CashierPaymentLookupResponse:
+    try:
+        response = integration_service.get_payment_by_plate(plate_text)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Payment service unavailable: {exc}") from exc
+    return CashierPaymentLookupResponse(**response)
+
+
+@router.post(
+    "/payments/register-cash-payment",
+    response_model=CashierPaymentRegistrationResponse,
+    dependencies=[require_permissions("payments.pay")],
+)
+def register_cash_payment(payload: CashierPaymentRegistrationRequest) -> CashierPaymentRegistrationResponse:
+    try:
+        response = integration_service.register_cash_payment(payload)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Payment service unavailable: {exc}") from exc
+    return CashierPaymentRegistrationResponse(**response)
 
 
 @router.post("/evidence/upload", response_model=EvidenceUploadResponse)

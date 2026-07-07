@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Parking University - Caja</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <header class="hero">
+          <h1>Secretaria / Caja</h1>
+          <p>Consulta la sesion activa por placa y registra el pago antes de la salida.</p>
+        </header>
+
+        <section class="card">
+          <h2>Acceso de caja</h2>
+          <div class="grid two">
+            <label>
+              <span>API Gateway</span>
+              <input id="gatewayUrl" type="url" value="http://127.0.0.1:8000" />
+            </label>
+            <label>
+              <span>Auth service</span>
+              <input id="authUrl" type="url" value="http://127.0.0.1:8001" />
+            </label>
+          </div>
+          <div class="grid two">
+            <label>
+              <span>Usuario</span>
+              <input id="username" type="text" value="cashier.user" />
+            </label>
+            <label>
+              <span>Clave</span>
+              <input id="password" type="password" value="demo1234!" />
+            </label>
+          </div>
+          <div class="actions">
+            <button id="loginBtn" class="primary" type="button">Iniciar sesion</button>
+            <span id="sessionBadge" class="badge muted">Sin autenticar</span>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Buscar sesion por placa</h2>
+          <div class="grid search">
+            <label>
+              <span>Placa</span>
+              <input id="plateInput" type="text" placeholder="PBD5650" />
+            </label>
+            <button id="searchBtn" class="primary" type="button">Buscar</button>
+          </div>
+          <p id="searchMessage" class="helper">Busca una sesion con estado INSIDE.</p>
+        </section>
+
+        <section id="sessionCard" class="card hidden">
+          <h2>Sesion activa</h2>
+          <dl class="details">
+            <div><dt>Sesion</dt><dd id="sessionId">-</dd></div>
+            <div><dt>Placa</dt><dd id="sessionPlate">-</dd></div>
+            <div><dt>Entrada</dt><dd id="entryTime">-</dd></div>
+            <div><dt>Tiempo</dt><dd id="duration">-</dd></div>
+            <div><dt>Monto</dt><dd id="amount">-</dd></div>
+            <div><dt>Estado</dt><dd id="paymentStatus">-</dd></div>
+          </dl>
+
+          <div class="grid two">
+            <label>
+              <span>Metodo de pago</span>
+              <select id="paymentMethod">
+                <option value="cash">Efectivo</option>
+                <option value="card">Tarjeta</option>
+                <option value="transfer">Transferencia</option>
+                <option value="mobile">Pago movil</option>
+              </select>
+            </label>
+            <label>
+              <span>Monto</span>
+              <input id="amountInput" type="number" step="0.01" min="0" />
+            </label>
+          </div>
+          <label>
+            <span>Observaciones</span>
+            <textarea id="notesInput" rows="3" placeholder="Pago en secretaria"></textarea>
+          </label>
+          <div class="actions">
+            <button id="payBtn" class="primary" type="button">Registrar pago</button>
+            <span id="paymentHint" class="helper">Solo roles cashier y admin pueden registrar pagos.</span>
+          </div>
+        </section>
+
+        <section id="receiptCard" class="card hidden success">
+          <h2>Comprobante</h2>
+          <dl class="details">
+            <div><dt>Recibo</dt><dd id="receiptNumber">-</dd></div>
+            <div><dt>Sesion</dt><dd id="receiptSessionId">-</dd></div>
+            <div><dt>Placa</dt><dd id="receiptPlate">-</dd></div>
+            <div><dt>Monto</dt><dd id="receiptAmount">-</dd></div>
+            <div><dt>Metodo</dt><dd id="receiptMethod">-</dd></div>
+            <div><dt>Pagado en</dt><dd id="receiptPaidAt">-</dd></div>
+            <div><dt>Auditoria</dt><dd id="receiptAudit">-</dd></div>
+          </dl>
+        </section>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

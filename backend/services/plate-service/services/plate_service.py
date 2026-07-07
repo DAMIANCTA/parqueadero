@@ -1,5 +1,7 @@
 import logging
+from datetime import UTC, datetime
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 from PIL import Image
@@ -19,6 +21,7 @@ from services.plate_models import (
     PlateDetectionOutcome,
     PlateImage,
     PlateTextCandidate,
+    YoloDetectionDebug,
 )
 from services.plate_normalizer import PlateNormalizer
 from services.plate_format_validator import PlateFormatValidator
@@ -103,18 +106,22 @@ class PlateService:
             self._log_outcome(image, outcome, quality_score=quality.quality_score)
             return outcome
 
-        detection, detector_warnings, detections_count = self._detect_region(image_bgr)
+        detection, detector_warnings, detections_count, yolo_debug = self._detect_region(image_bgr)
         warnings = list(dict.fromkeys([*quality.warnings, *detector_warnings]))
         logger.info(
-            "plate_detect image_id=%s preferred_ocr_engine=%s yolo_detections_count=%s bounding_box_found=%s selected_bounding_box=%s detector_warnings=%s",
+            "plate_detect image_id=%s preferred_ocr_engine=%s model_exists=%s model_loaded=%s model_names=%s yolo_detections_count=%s bounding_box_found=%s selected_bounding_box=%s detector_warnings=%s",
             image.image_id,
             settings.plate_ocr_preferred_engine,
+            yolo_debug.model_exists,
+            yolo_debug.model_loaded,
+            yolo_debug.model_names,
             detections_count,
             detection is not None,
             self._to_bbox(detection),
             detector_warnings,
         )
 
+        ocr_source = "crop" if detection else "full_image_fallback"
         crop_source = self.cropper.crop(image_bgr, detection) if detection else image_bgr
         if crop_source is None:
             warnings.append("PLATE_REGION_NOT_FOUND")
@@ -131,15 +138,23 @@ class PlateService:
             self._log_outcome(image, outcome, quality_score=quality.quality_score)
             return outcome
 
+        self._save_local_debug_artifacts(
+            image=image,
+            image_bgr=image_bgr,
+            crop_source=crop_source,
+            detection=detection,
+            ocr_source=ocr_source,
+        )
         variants = self.preprocessor.create_variants(crop_source)
         ocr_candidates, ocr_warnings, ocr_provider, selected_ocr_engine = self.ocr_reader.read_plate_text(variants)
         warnings.extend(ocr_warnings)
         logger.info(
-            "plate_detect image_id=%s preferred_ocr_engine=%s selected_ocr_engine=%s actual_ocr_engine_used=%s ocr_raw=%s",
+            "plate_detect image_id=%s preferred_ocr_engine=%s selected_ocr_engine=%s actual_ocr_engine_used=%s ocr_source=%s ocr_raw=%s",
             image.image_id,
             settings.plate_ocr_preferred_engine,
             selected_ocr_engine,
             ocr_provider,
+            ocr_source,
             [candidate.text for candidate in ocr_candidates],
         )
 
@@ -178,7 +193,10 @@ class PlateService:
             confidence = min(confidence, 0.60)
 
         if not detection:
-            warnings.append("MODEL_NOT_FOUND" if "MODEL_NOT_FOUND" in detector_warnings else "PLATE_REGION_NOT_FOUND")
+            warnings = [warning for warning in warnings if warning != "PLATE_REGION_NOT_FOUND"]
+            if "MODEL_NOT_FOUND" in detector_warnings:
+                warnings.append("MODEL_NOT_FOUND")
+            warnings.append("YOLO_REGION_NOT_FOUND_OCR_FALLBACK_USED")
 
         status = self._resolve_status(best.text, confidence, valid_format)
         outcome = PlateDetectionOutcome(
@@ -319,15 +337,15 @@ class PlateService:
             ocr_provider=ocr_result.provider,
         )
 
-    def _detect_region(self, image_bgr: Any) -> tuple[DetectionCandidate | None, list[str], int]:
+    def _detect_region(self, image_bgr: Any) -> tuple[DetectionCandidate | None, list[str], int, YoloDetectionDebug]:
         mode = settings.effective_plate_detection_mode
-        detection, warnings, detections_count = self.detector_service.detect_plate_region(image_bgr)
+        detection, warnings, detections_count, debug = self.detector_service.detect_plate_region(image_bgr)
         if mode == "real":
             if "MODEL_NOT_FOUND" in warnings:
                 raise RuntimeError("MODEL_NOT_FOUND")
             if "YOLO_NOT_AVAILABLE" in warnings:
                 raise RuntimeError("YOLO_NOT_AVAILABLE")
-        return detection, warnings, detections_count
+        return detection, warnings, detections_count, debug
 
     def _normalize_candidates(self, raw_candidates: list[PlateTextCandidate]) -> list[PlateTextCandidate]:
         normalized: list[PlateTextCandidate] = []
@@ -407,3 +425,44 @@ class PlateService:
             outcome.status,
             outcome.warnings,
         )
+
+    def _save_local_debug_artifacts(
+        self,
+        *,
+        image: PlateImage,
+        image_bgr: Any,
+        crop_source: Any,
+        detection: DetectionCandidate | None,
+        ocr_source: str,
+    ) -> None:
+        if settings.environment != "local":
+            return
+        try:
+            import cv2  # type: ignore
+
+            debug_dir = Path(settings.plate_debug_output_dir)
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
+            base_name = f"{stamp}-{image.image_id}"
+
+            annotated = image_bgr.copy()
+            if detection is not None:
+                x1 = detection.x
+                y1 = detection.y
+                x2 = detection.x + detection.width
+                y2 = detection.y + detection.height
+                cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+            annotated_path = debug_dir / f"{base_name}-annotated.jpg"
+            crop_path = debug_dir / f"{base_name}-ocr-{ocr_source}.jpg"
+            cv2.imwrite(str(annotated_path), annotated)
+            cv2.imwrite(str(crop_path), crop_source)
+            logger.info(
+                "plate_detect debug_artifacts_saved image_id=%s annotated_path=%s crop_path=%s ocr_source=%s",
+                image.image_id,
+                annotated_path,
+                crop_path,
+                ocr_source,
+            )
+        except Exception as exc:
+            logger.warning("plate_detect debug_artifacts_failed image_id=%s error=%s", image.image_id, exc)

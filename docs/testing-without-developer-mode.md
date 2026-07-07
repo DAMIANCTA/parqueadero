@@ -270,6 +270,6 @@ http://192.168.100.11:1880/parking-dashboard
    - `rejected`
    - `payment_pending`
    - barrera cerrada
-9. Presionar `Marcar pago demo`.
+9. Presionar `Verificar pago`.
 10. Reintentar `Validar salida`.
 11. Confirmar salida autorizada y barrera abierta.

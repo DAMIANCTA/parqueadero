@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from config import settings
-from services.plate_models import PlateDetectionOutcome, PlateTextCandidate
+from services.plate_models import PlateDetectionOutcome, PlateTextCandidate, YoloDetectionDebug
 from services.ocr_reader import OCRReaderService
 from services.runtime_probe import RuntimeCapabilities
 from services.plate_service import PlateService
@@ -214,6 +214,53 @@ class PlateDetectionTests(unittest.TestCase):
         self.assertIsNone(outcome.plate_text)
         self.assertEqual(outcome.confidence, 0.0)
         self.assertIn("BATCH_NOT_DETECTED", outcome.warnings)
+
+    def test_detect_plate_uses_fallback_warning_when_ocr_succeeds_without_yolo_region(self) -> None:
+        original_mode = settings.plate_detection_mode
+        settings.plate_detection_mode = "hybrid"
+        image_path = ASSETS_DIR / "visitor_ABC1234.jpg"
+        image_bytes = image_path.read_bytes()
+        loaded_image = SimpleNamespace(
+            image_id="img-minio-ocr-fallback",
+            filename="visitor_ABC1234.jpg",
+            content_type="image/jpeg",
+            content=image_bytes,
+            source="minio",
+            object_name="2026/07/07/plate_entry/visitor_ABC1234.jpg",
+        )
+
+        try:
+            with patch.object(self.service.image_source_service, "load_from_minio", return_value=loaded_image), patch.object(
+                self.service,
+                "_decode_bgr",
+                return_value=object(),
+            ), patch.object(
+                self.service.detector_service,
+                "detect_plate_region",
+                return_value=(
+                    None,
+                    ["PLATE_REGION_NOT_FOUND"],
+                    0,
+                    YoloDetectionDebug(model_exists=True, model_loaded=True, model_names=["license_plate"]),
+                ),
+            ), patch.object(
+                self.service.ocr_reader,
+                "read_plate_text",
+                return_value=(
+                    [PlateTextCandidate(text="ABC1234", confidence=1.0)],
+                    [],
+                    "rapidocr",
+                    "rapidocr",
+                ),
+            ):
+                outcome = self.service.detect_plate(image_id="img-minio-ocr-fallback", country_code="EC")
+
+            self.assertEqual(outcome.status, "DETECTED")
+            self.assertEqual(outcome.plate_text, "ABC1234")
+            self.assertIn("YOLO_REGION_NOT_FOUND_OCR_FALLBACK_USED", outcome.warnings)
+            self.assertNotIn("PLATE_REGION_NOT_FOUND", outcome.warnings)
+        finally:
+            settings.plate_detection_mode = original_mode
 
 
 if __name__ == "__main__":

@@ -3,12 +3,28 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from config import settings
 from main import app
+from security import encode_access_token
 
 
 class GatewayRouteTests(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(app)
+        token = encode_access_token(
+            secret_key=settings.jwt_secret_key,
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+            expires_minutes=30,
+            claims={
+                "sub": "test-cashier",
+                "username": "cashier.user",
+                "roles": ["cashier"],
+                "permissions": ["payments.read", "payments.pay"],
+                "university_id": "11111111-1111-1111-1111-111111111111",
+            },
+        )
+        self.headers = {"Authorization": f"Bearer {token}"}
 
     @patch("routes.system.integration_service.collect_health")
     def test_health_returns_aggregated_checks(self, collect_health) -> None:
@@ -56,6 +72,75 @@ class GatewayRouteTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["status"], "OPEN_COMMAND_SENT")
         self.assertTrue(body["published"])
+
+    @patch("routes.integration.integration_service.get_payment_by_plate")
+    def test_get_payment_by_plate_is_available_for_operational_check(self, get_payment_by_plate) -> None:
+        get_payment_by_plate.return_value = {
+            "session_id": "session-visitor-pending-001",
+            "plate_text": "VISPEND",
+            "entry_time": "2026-07-07T20:00:00Z",
+            "duration_minutes": 45,
+            "amount": 1.5,
+            "currency": "USD",
+            "payment_status": "PENDING",
+        }
+
+        response = self.client.get("/payments/by-plate/VISPEND")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["plate_text"], "VISPEND")
+        self.assertEqual(body["payment_status"], "PENDING")
+
+    @patch("routes.integration.integration_service.register_cash_payment")
+    def test_register_cash_payment_requires_authenticated_cashier(self, register_cash_payment) -> None:
+        register_cash_payment.return_value = {
+            "success": True,
+            "message": "Cash payment registered successfully",
+            "receipt_number": "REC-20260707-0002",
+            "paid_at": "2026-07-07T20:10:31Z",
+            "audit_log_id": "audit-123",
+            "session": {
+                "session_id": "session-visitor-pending-001",
+                "plate_text": "VISPEND",
+                "entry_time": "2026-07-07T20:00:00Z",
+                "duration_minutes": 45,
+                "amount": 1.5,
+                "currency": "USD",
+                "payment_status": "PAID",
+            },
+        }
+
+        unauthorized = self.client.post(
+            "/payments/register-cash-payment",
+            json={
+                "session_id": "session-visitor-pending-001",
+                "plate_text": "VISPEND",
+                "amount": 1.5,
+                "payment_method": "cash",
+                "cashier_user_id": "cashier.user",
+                "notes": "Pago en secretaria",
+            },
+        )
+        self.assertEqual(unauthorized.status_code, 401)
+
+        authorized = self.client.post(
+            "/payments/register-cash-payment",
+            headers=self.headers,
+            json={
+                "session_id": "session-visitor-pending-001",
+                "plate_text": "VISPEND",
+                "amount": 1.5,
+                "payment_method": "cash",
+                "cashier_user_id": "cashier.user",
+                "notes": "Pago en secretaria",
+            },
+        )
+
+        self.assertEqual(authorized.status_code, 200)
+        body = authorized.json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["session"]["payment_status"], "PAID")
 
 
 if __name__ == "__main__":

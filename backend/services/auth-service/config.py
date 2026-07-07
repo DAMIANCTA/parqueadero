@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -5,6 +6,7 @@ class Settings(BaseSettings):
     service_name: str = "auth-service"
     service_version: str = "0.1.0"
     environment: str = "local"
+    cors_allow_origins_csv: str = Field(default="*", alias="CORS_ALLOW_ORIGINS")
     jwt_secret_key: str = ""
     jwt_issuer: str = "smart-parking-university"
     jwt_audience: str = "smart-parking-clients"
@@ -16,6 +18,11 @@ class Settings(BaseSettings):
     audit_internal_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def cors_allow_origins(self) -> list[str]:
+        values = [value.strip() for value in self.cors_allow_origins_csv.split(",") if value.strip()]
+        return values or ["*"]
 
 
 settings = Settings()

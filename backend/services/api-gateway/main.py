@@ -30,7 +30,8 @@ app.add_middleware(
     secret_key=settings.jwt_secret_key,
     issuer=settings.jwt_issuer,
     audience=settings.jwt_audience,
-    public_paths={"/health", "/version", "/parking/entry", "/parking/exit", "/demo/open-gate", "/payments/pay-by-plate", "/evidence/upload", "/plates/detect", "/plates/detect-batch"},
+    public_paths={"/health", "/version", "/parking/entry", "/parking/exit", "/demo/open-gate", "/evidence/upload", "/plates/detect", "/plates/detect-batch"},
+    public_path_prefixes=("/payments/by-plate/",),
 )
 app.add_middleware(
     RateLimitMiddleware,

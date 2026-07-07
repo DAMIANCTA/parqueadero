@@ -104,6 +104,34 @@ class PaymentByPlateResponse(BaseModel):
     audit_log_id: str
 
 
+class CashierPaymentLookupResponse(BaseModel):
+    session_id: str
+    plate_text: str
+    entry_time: str
+    duration_minutes: int
+    amount: float
+    currency: str
+    payment_status: str
+
+
+class CashierPaymentRegistrationRequest(BaseModel):
+    session_id: str
+    plate_text: str = Field(min_length=3, max_length=20)
+    amount: float = Field(gt=0)
+    payment_method: str
+    cashier_user_id: str = Field(min_length=3, max_length=100)
+    notes: str | None = None
+
+
+class CashierPaymentRegistrationResponse(BaseModel):
+    success: bool
+    message: str
+    receipt_number: str | None = None
+    paid_at: str | None = None
+    audit_log_id: str
+    session: CashierPaymentLookupResponse | None = None
+
+
 class EvidenceUploadResponse(BaseModel):
     image_id: str
     bucket: str

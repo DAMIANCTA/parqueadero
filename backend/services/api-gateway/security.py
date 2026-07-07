@@ -140,15 +140,21 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         issuer: str,
         audience: str,
         public_paths: set[str] | None = None,
+        public_path_prefixes: tuple[str, ...] | None = None,
     ) -> None:
         super().__init__(app)
         self.secret_key = secret_key
         self.issuer = issuer
         self.audience = audience
         self.public_paths = public_paths or set()
+        self.public_path_prefixes = public_path_prefixes or tuple()
 
     async def dispatch(self, request: Request, call_next):
-        if request.method == "OPTIONS" or request.url.path in self.public_paths:
+        if (
+            request.method == "OPTIONS"
+            or request.url.path in self.public_paths
+            or any(request.url.path.startswith(prefix) for prefix in self.public_path_prefixes)
+        ):
             request.state.user = None
             return await call_next(request)
 

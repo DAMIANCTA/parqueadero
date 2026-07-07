@@ -1,7 +1,12 @@
+from fastapi import HTTPException
+
 from repositories.audit_log_repository import AuditLogRepository
 from repositories.payment_repository import PaymentRepository
 from config import settings
 from schemas.payment import (
+    CashierPaymentLookupResponse,
+    CashierPaymentRegistrationRequest,
+    CashierPaymentRegistrationResponse,
     InternalSessionUpsertRequest,
     PaymentByPlateRequest,
     PaymentRequest,
@@ -27,6 +32,99 @@ class PaymentFlowService:
     def get_session_by_qr(self, qr_code: str) -> PaymentSessionResponse:
         session = self.payment_repository.find_by_qr(qr_code)
         return self._session_response(session, "qr")
+
+    def get_active_payment_by_plate(self, plate_text: str) -> CashierPaymentLookupResponse:
+        session = self.payment_repository.find_by_plate(plate_text)
+        if session is None:
+            raise HTTPException(status_code=404, detail="No active INSIDE session found for the provided plate")
+        return self._to_cashier_lookup(session)
+
+    def register_cash_payment(self, payload: CashierPaymentRegistrationRequest) -> CashierPaymentRegistrationResponse:
+        session = self.payment_repository.find_by_session_id(payload.session_id)
+        normalized_plate = payload.plate_text.strip().upper()
+        if session is None or session["plate_text"] != normalized_plate:
+            audit_log = self.audit_log_repository.create_payment_audit_log(
+                action="payment.cashier.rejected",
+                resource_id=payload.session_id,
+                metadata={
+                    "reason": "session_not_found",
+                    "plate_text": normalized_plate,
+                    "cashier_user_id": payload.cashier_user_id,
+                },
+            )
+            raise HTTPException(status_code=404, detail=f"Active session not found for plate {normalized_plate}")
+
+        if session.get("session_status") != "INSIDE":
+            audit_log = self.audit_log_repository.create_payment_audit_log(
+                action="payment.cashier.rejected",
+                resource_id=payload.session_id,
+                metadata={
+                    "reason": "session_closed",
+                    "plate_text": normalized_plate,
+                    "cashier_user_id": payload.cashier_user_id,
+                },
+            )
+            raise HTTPException(status_code=409, detail="Cannot register payment for a closed session")
+
+        if session["payment_status"] != "PENDING":
+            audit_log = self.audit_log_repository.create_payment_audit_log(
+                action="payment.cashier.rejected",
+                resource_id=payload.session_id,
+                metadata={
+                    "reason": "payment_already_processed",
+                    "plate_text": normalized_plate,
+                    "cashier_user_id": payload.cashier_user_id,
+                    "payment_status": session["payment_status"],
+                },
+            )
+            raise HTTPException(status_code=409, detail="Payment can only be registered when payment_status is PENDING")
+
+        amount_due = self.tariff_service.calculate_amount(session["entry_time"])
+        if round(payload.amount, 2) != round(amount_due, 2):
+            self.audit_log_repository.create_payment_audit_log(
+                action="payment.cashier.rejected",
+                resource_id=payload.session_id,
+                metadata={
+                    "reason": "amount_mismatch",
+                    "plate_text": normalized_plate,
+                    "cashier_user_id": payload.cashier_user_id,
+                    "amount_due": amount_due,
+                    "amount_received": payload.amount,
+                },
+            )
+            raise HTTPException(status_code=400, detail="Provided amount does not match the calculated tariff")
+
+        updated_session = self.payment_repository.register_cash_payment(
+            session_id=payload.session_id,
+            plate_text=normalized_plate,
+            cashier_user_id=payload.cashier_user_id,
+            amount=payload.amount,
+            payment_method=payload.payment_method,
+            notes=payload.notes,
+        )
+        if updated_session is None:
+            raise HTTPException(status_code=404, detail="Active session not found")
+
+        audit_log = self.audit_log_repository.create_payment_audit_log(
+            action="payment.cashier.completed",
+            resource_id=payload.session_id,
+            metadata={
+                "plate_text": normalized_plate,
+                "cashier_user_id": payload.cashier_user_id,
+                "amount": payload.amount,
+                "payment_method": payload.payment_method,
+                "notes": payload.notes,
+                "receipt_number": updated_session.get("receipt_number"),
+            },
+        )
+        return CashierPaymentRegistrationResponse(
+            success=True,
+            message="Cash payment registered successfully",
+            receipt_number=updated_session.get("receipt_number"),
+            paid_at=updated_session.get("paid_at"),
+            audit_log_id=audit_log["id"],
+            session=self._to_cashier_lookup(updated_session),
+        )
 
     def pay_session(self, payload: PaymentRequest) -> PaymentResponse:
         session = self.payment_repository.find_by_session_id(payload.session_id)
@@ -191,10 +289,25 @@ class PaymentFlowService:
             qr_code=session["qr_code"],
             entry_time=session["entry_time"],
             exit_time=session.get("exit_time"),
+            session_status=session.get("session_status", "INSIDE"),
             payment_status=session["payment_status"],
             amount_due=round(amount_due, 2),
             currency=session["currency"],
+            duration_minutes=self.tariff_service.calculate_duration_minutes(session["entry_time"]),
             cashier_user_id=session.get("cashier_user_id"),
             payment_method=session.get("payment_method"),
             paid_at=session.get("paid_at"),
+            receipt_number=session.get("receipt_number"),
+            notes=session.get("notes"),
+        )
+
+    def _to_cashier_lookup(self, session: dict) -> CashierPaymentLookupResponse:
+        return CashierPaymentLookupResponse(
+            session_id=session["session_id"],
+            plate_text=session["plate_text"],
+            entry_time=session["entry_time"],
+            duration_minutes=self.tariff_service.calculate_duration_minutes(session["entry_time"]),
+            amount=round(self.tariff_service.calculate_amount(session["entry_time"]), 2),
+            currency=session["currency"],
+            payment_status=session["payment_status"],
         )

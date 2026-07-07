@@ -2,6 +2,9 @@ from fastapi import APIRouter, Request
 
 from config import settings
 from schemas.payment import (
+    CashierPaymentLookupResponse,
+    CashierPaymentRegistrationRequest,
+    CashierPaymentRegistrationResponse,
     InternalSessionUpsertRequest,
     PaymentByPlateRequest,
     PaymentRequest,
@@ -29,9 +32,19 @@ def get_session_by_qr(qr_code: str) -> PaymentSessionResponse:
     return payment_service.get_session_by_qr(qr_code)
 
 
+@router.get("/by-plate/{plate_text}", response_model=CashierPaymentLookupResponse, dependencies=[require_permissions("payments.read")])
+def get_active_payment_by_plate(plate_text: str) -> CashierPaymentLookupResponse:
+    return payment_service.get_active_payment_by_plate(plate_text)
+
+
 @router.post("/pay", response_model=PaymentResponse, dependencies=[require_permissions("payments.pay")])
 def pay_session(payload: PaymentRequest) -> PaymentResponse:
     return payment_service.pay_session(payload)
+
+
+@router.post("/register-cash-payment", response_model=CashierPaymentRegistrationResponse, dependencies=[require_permissions("payments.pay")])
+def register_cash_payment(payload: CashierPaymentRegistrationRequest) -> CashierPaymentRegistrationResponse:
+    return payment_service.register_cash_payment(payload)
 
 
 @router.post("/pay-by-plate", response_model=PaymentResponse, dependencies=[require_permissions("payments.pay")])

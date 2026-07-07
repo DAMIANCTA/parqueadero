@@ -13,12 +13,13 @@ class Settings(BaseSettings):
     plate_pattern_regex: str = r"^[A-Z]{3}\d{3,4}$"
     plate_detector_model_path: str = "models/plate_detector.pt"
     plate_ocr_preferred_engine: str = "rapidocr"
-    plate_detector_confidence: float = 0.40
+    plate_detector_confidence: float = 0.30
     plate_detector_imgsz: int = 320
     plate_detector_max_detections: int = 1
     plate_detector_device: str = "cpu"
     plate_preprocess_resize_factor: float = 1.5
     plate_preprocess_max_width: int = 960
+    plate_debug_output_dir: str = "/tmp/plate-debug"
     plate_quality_min_width: int = 640
     plate_quality_min_height: int = 360
     plate_quality_min_score: float = 0.45

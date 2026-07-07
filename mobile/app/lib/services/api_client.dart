@@ -68,6 +68,27 @@ class ApiClient {
     );
   }
 
+  Future<PaymentLookupResult> checkPaymentByPlate(String plateText) async {
+    final response = await _client.get(
+      Uri.parse('${AppConfig.apiBaseUrl}/payments/by-plate/${Uri.encodeComponent(plateText)}'),
+    );
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode >= 400) {
+      throw Exception(body['detail'] ?? 'No se pudo consultar el pago.');
+    }
+
+    return PaymentLookupResult(
+      sessionId: body['session_id'] as String? ?? 'n/a',
+      plateText: body['plate_text'] as String? ?? plateText,
+      entryTime: DateTime.tryParse(body['entry_time'] as String? ?? '') ?? DateTime.now(),
+      durationMinutes: body['duration_minutes'] as int? ?? 0,
+      amount: (body['amount'] as num? ?? 0).toDouble(),
+      currency: body['currency'] as String? ?? 'USD',
+      paymentStatus: body['payment_status'] as String? ?? 'PENDING',
+    );
+  }
+
   Future<EvidenceUploadResult> uploadEvidence({
     required EvidenceImageType imageType,
     required String plate,

@@ -36,7 +36,7 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
   bool _submitting = false;
   bool _uploadingFaceEvidence = false;
   bool _processingPlateEvidence = false;
-  PaymentByPlateResult? _paymentResult;
+  PaymentLookupResult? _paymentLookup;
   LocalEvidenceDraft? _faceEvidence;
   List<LocalEvidenceDraft> _plateEvidences = const [];
   EvidenceUploadResult? _uploadedFaceEvidence;
@@ -188,21 +188,27 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
     }
   }
 
-  Future<void> _markPaid() async {
+  Future<void> _verifyPayment() async {
     final plate = _effectivePlateText;
     if (plate.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Primero detecta la placa para marcar pago.')),
+        const SnackBar(content: Text('Primero detecta la placa para verificar el pago.')),
       );
       return;
     }
 
     try {
-      final result = await _apiClient.payByPlate(plate);
+      final result = await _apiClient.checkPaymentByPlate(plate);
       if (!mounted) return;
-      setState(() => _paymentResult = result);
+      setState(() => _paymentLookup = result);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
+        SnackBar(
+          content: Text(
+            result.isPaid
+                ? 'Pago verificado: la sesion ya esta en PAID.'
+                : 'Pago aun pendiente en Secretaria/Caja.',
+          ),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
@@ -266,6 +272,7 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
       _uploadedPlateEvidences = const [];
       _plateBatchDetection = null;
       _plateDetection = null;
+      _paymentLookup = null;
       _plateController.clear();
       _manualPlateController.clear();
       _overrideReasonController.clear();
@@ -675,9 +682,9 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
           _buildPlateDetectionCard(),
           const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed: _canSubmitWithPlate ? _markPaid : null,
+            onPressed: _canSubmitWithPlate ? _verifyPayment : null,
             icon: const Icon(Icons.payments),
-            label: const Text('Marcar pago demo'),
+            label: const Text('Verificar pago'),
           ),
           const SizedBox(height: 16),
           _buildFaceEvidenceCard(),
@@ -695,21 +702,23 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
             subtitle: Text(_livenessValid ? 'El liveness pasara.' : 'El liveness sera bloqueado.'),
             onChanged: (value) => setState(() => _livenessValid = value),
           ),
-          if (_paymentResult != null) ...[
+          if (_paymentLookup != null) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _paymentResult!.success ? Colors.green.withOpacity(0.10) : Colors.orange.withOpacity(0.10),
+                color: _paymentLookup!.isPaid ? Colors.green.withOpacity(0.10) : Colors.orange.withOpacity(0.10),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _paymentResult!.success ? Colors.green : Colors.orange),
+                border: Border.all(color: _paymentLookup!.isPaid ? Colors.green : Colors.orange),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_paymentResult!.message),
-                  if (_paymentResult!.session != null)
-                    Text('Estado de pago: ${_paymentResult!.session!['payment_status'] ?? '-'}'),
+                  Text('Estado de pago: ${_paymentLookup!.paymentStatus}'),
+                  Text('Placa: ${_paymentLookup!.plateText}'),
+                  Text('Entrada: ${_paymentLookup!.entryTime.toLocal()}'),
+                  Text('Tiempo estacionado: ${_paymentLookup!.durationMinutes} min'),
+                  Text('Monto calculado: ${_paymentLookup!.currency} ${_paymentLookup!.amount.toStringAsFixed(2)}'),
                 ],
               ),
             ),

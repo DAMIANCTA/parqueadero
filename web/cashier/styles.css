@@ -1,0 +1,162 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #eef4f3;
+  color: #132222;
+}
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+.panel {
+  width: min(920px, 100%);
+  display: grid;
+  gap: 16px;
+}
+
+.hero h1,
+.card h2 {
+  margin: 0 0 8px;
+}
+
+.hero p,
+.helper {
+  margin: 0;
+  color: #45625f;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #d4e2df;
+  border-radius: 8px;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.grid {
+  display: grid;
+  gap: 12px;
+}
+
+.grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid.search {
+  grid-template-columns: minmax(0, 1fr) 160px;
+  align-items: end;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #b8c8c4;
+  border-radius: 8px;
+  background: #fff;
+}
+
+textarea {
+  resize: vertical;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+}
+
+button.primary {
+  background: #0d7b74;
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #dff2ef;
+  color: #0d615b;
+}
+
+.badge.muted {
+  background: #edf1f1;
+  color: #52615f;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin: 0;
+}
+
+.details div {
+  border-bottom: 1px solid #edf1f1;
+  padding-bottom: 8px;
+}
+
+.details dt {
+  font-size: 13px;
+  color: #60716d;
+}
+
+.details dd {
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+
+.hidden {
+  display: none;
+}
+
+.success {
+  border-color: #8fd0c7;
+  background: #f2fbf8;
+}
+
+@media (max-width: 720px) {
+  .grid.two,
+  .grid.search,
+  .details {
+    grid-template-columns: 1fr;
+  }
+}

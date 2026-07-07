@@ -248,6 +248,6 @@ Una vez levantado el entorno, se puede demostrar el flujo completo sin IA real:
    - `Estado de acceso: rejected`
    - `Motivo: payment_pending`
    - barrera `closed`
-12. En la misma pantalla de salida, presionar `Marcar pago demo`.
+12. En la misma pantalla de salida, presionar `Verificar pago`.
 13. Repetir `Validar salida`.
 14. Confirmar salida autorizada y barrera abierta.

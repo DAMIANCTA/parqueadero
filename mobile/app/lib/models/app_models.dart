@@ -170,6 +170,28 @@ class PaymentByPlateResult {
   final Map<String, dynamic>? session;
 }
 
+class PaymentLookupResult {
+  const PaymentLookupResult({
+    required this.sessionId,
+    required this.plateText,
+    required this.entryTime,
+    required this.durationMinutes,
+    required this.amount,
+    required this.currency,
+    required this.paymentStatus,
+  });
+
+  final String sessionId;
+  final String plateText;
+  final DateTime entryTime;
+  final int durationMinutes;
+  final double amount;
+  final String currency;
+  final String paymentStatus;
+
+  bool get isPaid => paymentStatus == 'PAID';
+}
+
 class LocalEvidenceDraft {
   const LocalEvidenceDraft({
     required this.label,

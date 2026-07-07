@@ -7,6 +7,7 @@ from psycopg import connect
 
 from config import settings
 from schemas.integration import (
+    CashierPaymentRegistrationRequest,
     DemoOpenGateRequest,
     ParkingEntryRequest,
     ParkingExitRequest,
@@ -112,6 +113,21 @@ class IntegrationService:
         return self._post_json(
             self.targets["payment"],
             "/payments/pay-by-plate",
+            payload.model_dump(),
+            permissions=["payments.pay"],
+        )
+
+    def get_payment_by_plate(self, plate_text: str) -> dict:
+        return self._get_json(
+            self.targets["payment"],
+            f"/payments/by-plate/{plate_text}",
+            permissions=["payments.read"],
+        )
+
+    def register_cash_payment(self, payload: CashierPaymentRegistrationRequest) -> dict:
+        return self._post_json(
+            self.targets["payment"],
+            "/payments/register-cash-payment",
             payload.model_dump(),
             permissions=["payments.pay"],
         )
@@ -241,6 +257,23 @@ class IntegrationService:
                     "Authorization": f"Bearer {token}",
                     "Content-Type": "application/json",
                 },
+            )
+        response.raise_for_status()
+        return response.json()
+
+    def _get_json(
+        self,
+        target: DownstreamTarget,
+        path: str,
+        *,
+        permissions: list[str],
+        timeout_seconds: float | None = None,
+    ) -> dict:
+        token = self._build_internal_token(permissions)
+        with httpx.Client(timeout=self._build_timeout(timeout_seconds or self.default_downstream_timeout)) as client:
+            response = client.get(
+                f"{target.base_url}{path}",
+                headers={"Authorization": f"Bearer {token}"},
             )
         response.raise_for_status()
         return response.json()

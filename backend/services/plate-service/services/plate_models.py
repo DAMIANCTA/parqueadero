@@ -27,6 +27,22 @@ class DetectionCandidate:
 
 
 @dataclass(slots=True)
+class YoloDetectionDebugItem:
+    confidence: float
+    box: dict[str, int]
+    class_id: int | None = None
+    class_name: str | None = None
+
+
+@dataclass(slots=True)
+class YoloDetectionDebug:
+    model_exists: bool
+    model_loaded: bool
+    model_names: list[str] = field(default_factory=list)
+    detections: list[YoloDetectionDebugItem] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class PlateTextCandidate:
     text: str
     confidence: float
