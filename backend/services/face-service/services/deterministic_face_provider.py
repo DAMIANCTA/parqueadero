@@ -2,7 +2,7 @@ import hashlib
 
 from config import settings
 from services.embedding_provider import EmbeddingProvider
-from services.face_models import FaceEmbedding, ImageReference
+from services.face_models import FaceAnalysisResult, FaceBoundingBox, FaceEmbedding, ImageReference
 from services.subject_hint import derive_subject_hint
 
 
@@ -32,6 +32,29 @@ class DeterministicFaceProvider(EmbeddingProvider):
             vector=vector,
             model_name=self.model_name,
             quality_score=max(0.0, min(1.0, round(quality_score, 4))),
+        )
+
+    def analyze_face(
+        self,
+        *,
+        image_reference: ImageReference,
+        image_bytes: bytes,
+        person_id: str | None = None,
+        quality_score_hint: float | None = None,
+    ) -> FaceAnalysisResult:
+        del image_bytes
+        embedding = self.generate_embedding(
+            image_reference=image_reference,
+            person_id=person_id,
+            quality_score_hint=quality_score_hint,
+        )
+        return FaceAnalysisResult(
+            detected=True,
+            embedding=embedding,
+            bounding_box=FaceBoundingBox(x=0, y=0, width=0, height=0),
+            provider_name=self.model_name,
+            mode_used="prepared",
+            warnings=["DETERMINISTIC_FALLBACK_USED"],
         )
 
     def _estimate_quality(self, image_reference: ImageReference) -> float:

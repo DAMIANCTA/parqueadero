@@ -59,12 +59,29 @@ class GateCommand(BaseModel):
     published: bool
 
 
+class FaceValidationResult(BaseModel):
+    detected: bool
+    match: bool | None = None
+    similarity: float | None = Field(default=None, ge=0, le=1)
+    threshold: float | None = Field(default=None, ge=0, le=1)
+    image_id: str | None = None
+    template_id: str | None = None
+    provider: str
+    model_name: str | None = None
+    mode: str
+    quality_score: float | None = Field(default=None, ge=0, le=1)
+    embedding_size: int = 0
+    bounding_box: dict | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
 class ParkingEntryResponse(BaseModel):
     authorized: bool
     status: Literal["AUTHORIZED", "REJECTED"]
     message: str
     session: SessionData | None = None
     gate_command: GateCommand | None = None
+    face_validation: FaceValidationResult | None = None
     access_event_id: str
     audit_log_id: str
     incident_id: str | None = None
@@ -76,6 +93,7 @@ class ParkingExitResponse(BaseModel):
     message: str
     session: SessionData | None = None
     gate_command: GateCommand | None = None
+    face_validation: FaceValidationResult | None = None
     access_event_id: str
     audit_log_id: str
     incident_id: str | None = None

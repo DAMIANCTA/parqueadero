@@ -120,6 +120,7 @@ class AuthorizationResult {
     this.gateId,
     this.incidentId,
     this.session,
+    this.faceValidation,
   });
 
   final bool authorized;
@@ -132,6 +133,7 @@ class AuthorizationResult {
   final String? gateId;
   final String? incidentId;
   final ResultSessionSummary? session;
+  final FaceValidationUiResult? faceValidation;
 }
 
 class DemoGateResult {
@@ -352,6 +354,112 @@ class PlateBatchDetectionResult {
       warnings: warnings,
       detectedAt: detectedAt,
     );
+  }
+}
+
+class FaceServiceConfig {
+  const FaceServiceConfig({
+    required this.faceServiceMode,
+    required this.faceRealProvider,
+    required this.similarityThreshold,
+    required this.livenessThreshold,
+    required this.embeddingDimensions,
+    required this.opencvAvailable,
+    required this.insightfaceAvailable,
+    required this.faceRecognitionAvailable,
+    required this.providerAvailable,
+    required this.modelLoaded,
+    required this.activeProvider,
+    this.environment,
+    this.modelError,
+  });
+
+  final String faceServiceMode;
+  final String faceRealProvider;
+  final double similarityThreshold;
+  final double livenessThreshold;
+  final int embeddingDimensions;
+  final bool opencvAvailable;
+  final bool insightfaceAvailable;
+  final bool faceRecognitionAvailable;
+  final bool providerAvailable;
+  final bool modelLoaded;
+  final String activeProvider;
+  final String? environment;
+  final String? modelError;
+
+  bool get usesRealOrHybrid => faceServiceMode == 'hybrid' || faceServiceMode == 'real';
+  bool get runtimeReady => providerAvailable && modelLoaded && opencvAvailable;
+  bool get usingFallback => usesRealOrHybrid && !runtimeReady;
+}
+
+class FaceValidationUiResult {
+  const FaceValidationUiResult({
+    required this.detected,
+    required this.provider,
+    required this.mode,
+    required this.embeddingSize,
+    required this.warnings,
+    this.match,
+    this.similarity,
+    this.threshold,
+    this.imageId,
+    this.templateId,
+    this.modelName,
+    this.qualityScore,
+    this.boundingBox,
+  });
+
+  final bool detected;
+  final bool? match;
+  final double? similarity;
+  final double? threshold;
+  final String? imageId;
+  final String? templateId;
+  final String provider;
+  final String mode;
+  final String? modelName;
+  final double? qualityScore;
+  final int embeddingSize;
+  final Map<String, dynamic>? boundingBox;
+  final List<String> warnings;
+
+  bool get usesDistanceMetric {
+    final providerValue = provider.toLowerCase();
+    final modelValue = (modelName ?? '').toLowerCase();
+    return providerValue.contains('face_recognition') || modelValue.contains('face_recognition');
+  }
+
+  String get matchLabel {
+    if (match == null) {
+      return detected ? 'DETECTED' : 'NOT_DETECTED';
+    }
+    return match! ? 'MATCH' : 'NO_MATCH';
+  }
+
+  String get similarityLabel =>
+      similarity == null ? 'N/A' : '${(similarity! * 100).toStringAsFixed(1)}%';
+
+  String get scoreLabel => usesDistanceMetric ? 'Distance' : 'Similarity';
+
+  String get scoreValueLabel {
+    if (similarity == null) {
+      return 'N/A';
+    }
+    if (usesDistanceMetric) {
+      return similarity!.toStringAsFixed(4);
+    }
+    return '${(similarity! * 100).toStringAsFixed(1)}%';
+  }
+
+  String get thresholdValueLabel {
+    if (threshold == null) {
+      return 'N/A';
+    }
+    if (usesDistanceMetric) {
+      return threshold!.toStringAsFixed(4);
+    }
+    return '${(threshold! * 100).toStringAsFixed(1)}%';
   }
 }
 

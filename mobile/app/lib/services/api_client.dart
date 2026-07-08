@@ -15,6 +15,29 @@ class ApiClient {
     return response.statusCode == 200;
   }
 
+  Future<FaceServiceConfig> getFaceConfig() async {
+    final response = await _client.get(Uri.parse('${AppConfig.apiBaseUrl}/faces/config'));
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode >= 400) {
+      throw Exception(body['detail'] ?? 'No se pudo consultar la configuracion facial.');
+    }
+    return FaceServiceConfig(
+      faceServiceMode: body['face_service_mode'] as String? ?? 'mock',
+      faceRealProvider: body['face_real_provider'] as String? ?? 'mock',
+      similarityThreshold: (body['similarity_threshold'] as num? ?? 0.82).toDouble(),
+      livenessThreshold: (body['liveness_threshold'] as num? ?? 0.75).toDouble(),
+      embeddingDimensions: body['embedding_dimensions'] as int? ?? 0,
+      opencvAvailable: body['opencv_available'] as bool? ?? false,
+      insightfaceAvailable: body['insightface_available'] as bool? ?? false,
+      faceRecognitionAvailable: body['face_recognition_available'] as bool? ?? false,
+      providerAvailable: body['provider_available'] as bool? ?? false,
+      modelLoaded: body['model_loaded'] as bool? ?? false,
+      activeProvider: body['active_provider'] as String? ?? 'unknown',
+      environment: body['environment'] as String?,
+      modelError: body['model_error'] as String?,
+    );
+  }
+
   Future<DemoGateResult> openDemoGate() async {
     final response = await _client.post(
       Uri.parse('${AppConfig.apiBaseUrl}/demo/open-gate'),
@@ -337,6 +360,25 @@ class ApiClient {
               plateText: sessionData['plate_text'] as String,
               personType: sessionData['person_type'] as String?,
             ),
+      faceValidation: body['face_validation'] is Map<String, dynamic>
+          ? FaceValidationUiResult(
+              detected: body['face_validation']['detected'] as bool? ?? false,
+              match: body['face_validation']['match'] as bool?,
+              similarity: (body['face_validation']['similarity'] as num?)?.toDouble(),
+              threshold: (body['face_validation']['threshold'] as num?)?.toDouble(),
+              imageId: body['face_validation']['image_id'] as String?,
+              templateId: body['face_validation']['template_id'] as String?,
+              provider: body['face_validation']['provider'] as String? ?? 'unknown',
+              mode: body['face_validation']['mode'] as String? ?? 'unknown',
+              modelName: body['face_validation']['model_name'] as String?,
+              qualityScore: (body['face_validation']['quality_score'] as num?)?.toDouble(),
+              embeddingSize: body['face_validation']['embedding_size'] as int? ?? 0,
+              boundingBox: body['face_validation']['bounding_box'] is Map
+                  ? Map<String, dynamic>.from(body['face_validation']['bounding_box'] as Map)
+                  : null,
+              warnings: (body['face_validation']['warnings'] as List? ?? const []).map((item) => item.toString()).toList(),
+            )
+          : null,
     );
   }
 }

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from services.face_models import FaceEmbedding, ImageReference
+from services.face_models import FaceAnalysisResult, FaceEmbedding, ImageReference
 
 
 class EmbeddingProvider(ABC):
@@ -17,4 +17,15 @@ class EmbeddingProvider(ABC):
         person_id: str | None = None,
         quality_score_hint: float | None = None,
     ) -> FaceEmbedding:
+        raise NotImplementedError
+
+    @abstractmethod
+    def analyze_face(
+        self,
+        *,
+        image_reference: ImageReference,
+        image_bytes: bytes,
+        person_id: str | None = None,
+        quality_score_hint: float | None = None,
+    ) -> FaceAnalysisResult:
         raise NotImplementedError

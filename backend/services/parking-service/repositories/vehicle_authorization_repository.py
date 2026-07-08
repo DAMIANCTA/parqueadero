@@ -49,7 +49,7 @@ class VehicleAuthorizationRepository:
 
         return {
             "plate_exists": True,
-            "face_authorized": face_image_id in record["authorized_face_ids"],
+            "face_authorized": (not face_image_id) or face_image_id in record["authorized_face_ids"],
             "permission_valid": record["permission_valid"],
             "person_type": record["person_type"],
         }

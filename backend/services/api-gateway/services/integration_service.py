@@ -132,6 +132,13 @@ class IntegrationService:
             permissions=["payments.pay"],
         )
 
+    def get_face_config(self) -> dict:
+        return self._get_json(
+            self.targets["face"],
+            "/faces/config",
+            permissions=["faces.verify"],
+        )
+
     def proxy_plate_detection(self, payload: PlateDetectRequest) -> dict:
         return self._post_json(
             self.targets["plate"],

@@ -62,12 +62,29 @@ class GateCommand(BaseModel):
     payload: dict | None = None
 
 
+class FaceValidationResponse(BaseModel):
+    detected: bool
+    match: bool | None = None
+    similarity: float | None = Field(default=None, ge=0, le=1)
+    threshold: float | None = Field(default=None, ge=0, le=1)
+    image_id: str | None = None
+    template_id: str | None = None
+    provider: str
+    model_name: str | None = None
+    mode: str
+    quality_score: float | None = Field(default=None, ge=0, le=1)
+    embedding_size: int = 0
+    bounding_box: dict | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
 class ParkingAuthorizationResponse(BaseModel):
     authorized: bool
     status: str
     message: str
     session: SessionData | None = None
     gate_command: GateCommand | None = None
+    face_validation: FaceValidationResponse | None = None
     access_event_id: str
     audit_log_id: str
     incident_id: str | None = None
@@ -205,3 +222,19 @@ class PlateDetectBatchResponse(BaseModel):
     confidence: float = Field(ge=0, le=1)
     results: list[PlateBatchResultItem] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class FaceServiceConfigResponse(BaseModel):
+    environment: str
+    face_service_mode: str
+    face_real_provider: str
+    similarity_threshold: float = Field(ge=0, le=1)
+    liveness_threshold: float = Field(ge=0, le=1)
+    embedding_dimensions: int
+    opencv_available: bool
+    insightface_available: bool
+    face_recognition_available: bool = False
+    provider_available: bool = False
+    model_loaded: bool
+    model_error: str | None = None
+    active_provider: str

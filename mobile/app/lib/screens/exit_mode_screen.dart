@@ -33,6 +33,7 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
   bool _faceValid = true;
   bool _livenessValid = true;
   double _faceConfidence = 0.95;
+  FaceServiceConfig? _faceConfig;
   bool _submitting = false;
   bool _uploadingFaceEvidence = false;
   bool _processingPlateEvidence = false;
@@ -52,6 +53,7 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
   bool get _supportsMultiGallery => !kIsWeb;
 
   bool get _isSecurityOperator => ParkingAppScope.of(context).isSecurityOperator;
+  bool get _useRealFaceFlow => _faceConfig?.usesRealOrHybrid ?? false;
 
   bool get _usingManualOverride {
     if (!_isSecurityOperator) {
@@ -115,6 +117,20 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _loadFaceConfig();
+  }
+
+  Future<void> _loadFaceConfig() async {
+    try {
+      final config = await _apiClient.getFaceConfig();
+      if (!mounted) return;
+      setState(() => _faceConfig = config);
+    } catch (_) {}
+  }
+
+  @override
   void dispose() {
     _plateController.dispose();
     _manualPlateController.dispose();
@@ -157,14 +173,14 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
         plateText: effectivePlate,
         faceImageId: faceEvidence.imageId,
         plateImageId: plateEvidence.imageId,
-        faceMockId: _buildFaceImageId(effectivePlate),
+        faceMockId: _useRealFaceFlow ? null : _buildFaceImageId(effectivePlate),
         operatorUsername: session?.username,
         plateDetectedText: _plateDetection?.plateText,
         plateDetectionConfidence: _plateDetection?.confidence,
         plateOverrideReason: _usingManualOverride ? _overrideReasonController.text.trim() : null,
         livenessScore: _livenessValid ? 0.95 : 0.30,
         confidencePlate: _effectivePlateConfidence,
-        confidenceFace: _faceValid ? _faceConfidence : 0.35,
+        confidenceFace: _useRealFaceFlow ? 0.95 : (_faceValid ? _faceConfidence : 0.35),
       );
       if (!mounted) return;
       ParkingAppScope.of(context).addHistory(
@@ -448,6 +464,11 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
   }
 
   Widget _buildFaceEvidenceCard() {
+    final helperText = _useRealFaceFlow
+        ? (_faceConfig?.usingFallback ?? false)
+            ? 'Modo hybrid activo. Si el proveedor facial real no carga, el backend usara un fallback preparado para la comparacion.'
+            : 'Modo ${_faceConfig?.faceServiceMode ?? 'hybrid'} activo. Captura un rostro real para validar la salida.'
+        : 'Puedes usar captura real o mock para la demostracion.';
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -458,6 +479,8 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Evidencia de rostro', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          Text(helperText),
           const SizedBox(height: 8),
           Text(_faceEvidence == null ? 'Sin evidencia seleccionada.' : '${_faceEvidence!.label} - ${_faceEvidence!.fileName}'),
           if (_uploadedFaceEvidence != null) ...[
@@ -481,11 +504,12 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
                   icon: const Icon(Icons.photo_camera_outlined),
                   label: const Text('Capturar'),
                 ),
-              OutlinedButton.icon(
-                onPressed: () => _useMockEvidence(isFace: true),
-                icon: const Icon(Icons.auto_fix_high_outlined),
-                label: const Text('Usar mock'),
-              ),
+              if (!_useRealFaceFlow)
+                OutlinedButton.icon(
+                  onPressed: () => _useMockEvidence(isFace: true),
+                  icon: const Icon(Icons.auto_fix_high_outlined),
+                  label: const Text('Usar mock'),
+                ),
             ],
           ),
         ],
@@ -691,12 +715,39 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
           const SizedBox(height: 16),
           _buildFaceEvidenceCard(),
           const SizedBox(height: 12),
-          SwitchListTile(
-            value: _faceValid,
-            title: const Text('Simulador de rostro valido'),
-            subtitle: Text(_faceValid ? 'El rostro coincidira.' : 'El rostro sera rechazado.'),
-            onChanged: (value) => setState(() => _faceValid = value),
-          ),
+          if (_useRealFaceFlow)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.teal.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.teal.withOpacity(0.35)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Reconocimiento facial activo'),
+                  const SizedBox(height: 4),
+                  Text('Modo: ${_faceConfig?.faceServiceMode ?? 'hybrid'}'),
+                  Text('Proveedor: ${_faceConfig?.activeProvider ?? 'insightface'}'),
+                  Text('Dimensiones embedding: ${_faceConfig?.embeddingDimensions ?? 0}'),
+                  Text(
+                    (_faceConfig?.usingFallback ?? false)
+                        ? 'Estado runtime: fallback preparado'
+                        : 'Estado runtime: proveedor listo',
+                  ),
+                  if ((_faceConfig?.modelError ?? '').isNotEmpty)
+                    Text('Detalle: ${_faceConfig!.modelError!}'),
+                ],
+              ),
+            )
+          else
+            SwitchListTile(
+              value: _faceValid,
+              title: const Text('Simulador de rostro valido'),
+              subtitle: Text(_faceValid ? 'El rostro coincidira.' : 'El rostro sera rechazado.'),
+              onChanged: (value) => setState(() => _faceValid = value),
+            ),
           const SizedBox(height: 12),
           SwitchListTile(
             value: _livenessValid,
@@ -735,9 +786,11 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 20),
-          Text('Confianza rostro: ${_faceConfidence.toStringAsFixed(2)}'),
-          Slider(value: _faceConfidence, onChanged: (value) => setState(() => _faceConfidence = value)),
+          if (!_useRealFaceFlow) ...[
+            const SizedBox(height: 20),
+            Text('Confianza rostro: ${_faceConfidence.toStringAsFixed(2)}'),
+            Slider(value: _faceConfidence, onChanged: (value) => setState(() => _faceConfidence = value)),
+          ],
           const SizedBox(height: 24),
           FilledButton(
             onPressed: (_submitting || !_canSubmitWithPlate || _processingPlateEvidence) ? null : _submit,

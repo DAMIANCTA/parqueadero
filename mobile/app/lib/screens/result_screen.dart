@@ -48,6 +48,28 @@ class ResultScreen extends StatelessWidget {
               Text('Placa: ${result.session!.plateText}'),
               const SizedBox(height: 16),
             ],
+            if (result.faceValidation != null) ...[
+              Text('Validacion facial', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text('Rostro detectado: ${result.faceValidation!.detected ? 'Si' : 'No'}'),
+              Text('Resultado: ${result.faceValidation!.matchLabel}'),
+              if (result.faceValidation!.similarity != null)
+                Text('${result.faceValidation!.scoreLabel}: ${result.faceValidation!.scoreValueLabel}'),
+              if (result.faceValidation!.threshold != null)
+                Text('Umbral: ${result.faceValidation!.thresholdValueLabel}'),
+              Text('Proveedor: ${result.faceValidation!.provider}'),
+              if ((result.faceValidation!.modelName ?? '').isNotEmpty)
+                Text('Modelo: ${result.faceValidation!.modelName}'),
+              if (result.faceValidation!.qualityScore != null)
+                Text('Calidad: ${(result.faceValidation!.qualityScore! * 100).toStringAsFixed(1)}%'),
+              if (result.faceValidation!.embeddingSize > 0)
+                Text('Embedding: ${result.faceValidation!.embeddingSize} dimensiones'),
+              if (result.faceValidation!.boundingBox != null)
+                Text('Bounding box: ${result.faceValidation!.boundingBox}'),
+              if (result.faceValidation!.warnings.isNotEmpty)
+                Text('Advertencias: ${result.faceValidation!.warnings.join(', ')}'),
+              const SizedBox(height: 16),
+            ],
             Text('Access event: ${result.accessEventId}'),
             Text('Audit log: ${result.auditLogId}'),
             if (result.incidentId != null) Text('Incidente: ${result.incidentId}'),

@@ -3,12 +3,19 @@ from fastapi import APIRouter
 from schemas.faces import (
     FaceCompareRequest,
     FaceCompareResponse,
+    FaceConfigResponse,
+    FaceDetectRequest,
+    FaceDetectResponse,
     FaceEnrollRequest,
     FaceEnrollResponse,
+    FaceLivenessRequest,
+    FaceLivenessResponse,
     FaceLivenessCheckRequest,
     FaceLivenessCheckResponse,
     FaceVerifyRequest,
     FaceVerifyResponse,
+    FaceVerifySessionRequest,
+    FaceVerifySessionResponse,
 )
 from security import require_permissions
 from services.face_recognition_service import FaceRecognitionService
@@ -16,6 +23,16 @@ from services.face_recognition_service import FaceRecognitionService
 
 router = APIRouter(tags=["faces"])
 face_service = FaceRecognitionService()
+
+
+@router.get("/faces/config", response_model=FaceConfigResponse)
+def faces_config() -> FaceConfigResponse:
+    return face_service.get_config()
+
+
+@router.post("/faces/detect", response_model=FaceDetectResponse, dependencies=[require_permissions("faces.verify")])
+def detect_face(payload: FaceDetectRequest) -> FaceDetectResponse:
+    return face_service.detect(payload)
 
 
 @router.post("/faces/enroll", response_model=FaceEnrollResponse, dependencies=[require_permissions("faces.enroll")])
@@ -31,6 +48,16 @@ def verify_face(payload: FaceVerifyRequest) -> FaceVerifyResponse:
 @router.post("/faces/compare", response_model=FaceCompareResponse, dependencies=[require_permissions("faces.compare")])
 def compare_faces(payload: FaceCompareRequest) -> FaceCompareResponse:
     return face_service.compare(payload)
+
+
+@router.post("/faces/verify-session", response_model=FaceVerifySessionResponse, dependencies=[require_permissions("faces.verify")])
+def verify_session_face(payload: FaceVerifySessionRequest) -> FaceVerifySessionResponse:
+    return face_service.verify_session(payload)
+
+
+@router.post("/faces/liveness", response_model=FaceLivenessResponse, dependencies=[require_permissions("faces.liveness_check")])
+def liveness(payload: FaceLivenessRequest) -> FaceLivenessResponse:
+    return face_service.liveness(payload)
 
 
 @router.post("/faces/liveness-check", response_model=FaceLivenessCheckResponse, dependencies=[require_permissions("faces.liveness_check")])

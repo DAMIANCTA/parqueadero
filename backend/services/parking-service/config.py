@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     min_liveness_score: float = 0.75
     min_face_confidence: float = 0.80
     min_plate_confidence: float = 0.80
+    face_service_mode: str = "hybrid"
+    face_similarity_threshold: float = 0.82
+    face_service_url: str = "http://face-service:8000"
+    face_service_timeout_seconds: float = 10.0
     iot_service_url: str = "http://iot-service:8000"
     iot_service_timeout_seconds: float = 1.5
     payment_service_url: str = "http://payment-service:8000"
@@ -27,6 +31,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = ""
     jwt_issuer: str = "smart-parking-university"
     jwt_audience: str = "smart-parking-clients"
+    jwt_access_token_expires_minutes: int = 60
     rate_limit_requests: int = 60
     rate_limit_window_seconds: int = 60
     audit_enabled: bool = True

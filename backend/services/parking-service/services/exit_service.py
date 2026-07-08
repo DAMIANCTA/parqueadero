@@ -9,7 +9,7 @@ from repositories.parking_session_repository import ParkingSessionRepository
 from repositories.payment_repository import PaymentRepository
 from repositories.plate_repository import PlateRepository
 from repositories.vehicle_authorization_repository import VehicleAuthorizationRepository
-from schemas.parking import GateCommand, ParkingExitRequest, ParkingExitResponse, SessionData
+from schemas.parking import FaceValidationResult, GateCommand, ParkingExitRequest, ParkingExitResponse, SessionData
 from services.evidence_storage_service import EvidenceStorageService
 from services.face_validation_service import FaceValidationService
 
@@ -28,8 +28,7 @@ class ExitService:
         self.evidence_service = EvidenceStorageService()
 
     def process_exit(self, payload: ParkingExitRequest) -> ParkingExitResponse:
-        face_mock_id = payload.face_mock_id or payload.face_image_id
-        payload.face_mock_id = face_mock_id
+        face_reference_id = self._resolve_face_reference_id(payload)
         try:
             normalized_plate = self.plate_repository.normalize_and_validate(
                 plate_text=payload.plate_text,
@@ -52,34 +51,46 @@ class ExitService:
                 create_incident=True,
             )
 
-        visitor_session = self.parking_session_repository.find_active_session_by_plate(
+        active_session = self.parking_session_repository.find_active_session_by_plate(
             university_id=payload.university_id,
             plate_text=normalized_plate,
         )
-        if visitor_session is not None and visitor_session["person_type"] == "visitor":
-            return self._process_visitor_exit(payload, normalized_plate, visitor_session)
+        if active_session is not None and active_session["person_type"] == "visitor":
+            return self._process_visitor_exit(payload, normalized_plate, active_session, face_reference_id=face_reference_id)
 
-        return self._process_registered_exit(payload, normalized_plate)
+        return self._process_registered_exit(payload, normalized_plate, active_session, face_reference_id=face_reference_id)
 
     def _process_visitor_exit(
         self,
         payload: ParkingExitRequest,
         normalized_plate: str,
         visitor_session: dict,
+        face_reference_id: str,
     ) -> ParkingExitResponse:
-        face_match = self.face_service.compare_entry_and_exit_faces(
-            entry_face_image_id=visitor_session["entry_face_image_id"],
-            exit_face_image_id=payload.face_mock_id or payload.face_image_id,
+        face_match = self.face_service.verify_session_face(
+            university_id=payload.university_id,
+            session_id=visitor_session["session_id"],
+            face_image_id=payload.face_image_id,
+            gate_id=payload.gate_id,
             confidence_face=payload.confidence_face,
             min_confidence=settings.min_face_confidence,
+        )
+        print(
+            "parking-service visitor_exit_face_validation "
+            f"session_id={visitor_session['session_id']} image_id={payload.face_image_id} "
+            f"detected={face_match.get('detected')} match={face_match.get('match')} "
+            f"similarity={face_match.get('similarity')} threshold={face_match.get('threshold')} "
+            f"provider={face_match.get('provider')} model_name={face_match.get('model_name')} "
+            f"bounding_box={face_match.get('bounding_box')} warnings={face_match.get('warnings')}"
         )
         if not face_match["accepted"]:
             return self._reject(
                 payload=payload,
                 normalized_plate=normalized_plate,
-                reason="Face does not match entry record",
+                reason="Face verification failed",
                 session_id=visitor_session["session_id"],
                 create_incident=True,
+                face_validation=face_match,
             )
 
         payment_status = self.payment_repository.get_status_by_plate(normalized_plate)
@@ -115,6 +126,7 @@ class ExitService:
                     "payment_valid_until": payment_status.get("payment_valid_until") if payment_status else None,
                     "session_status_before": visitor_session.get("session_status"),
                 },
+                face_validation=face_match,
             )
         if payment_valid_until is not None and datetime.now(UTC) > payment_valid_until:
             return self._reject(
@@ -134,6 +146,7 @@ class ExitService:
                     "payment_valid_until": payment_status.get("payment_valid_until") if payment_status else None,
                     "session_status_before": visitor_session.get("session_status"),
                 },
+                face_validation=face_match,
             )
 
         session_record = self.parking_session_repository.close_session(
@@ -141,7 +154,7 @@ class ExitService:
             plate_text=normalized_plate,
             person_type="visitor",
             payment_status=effective_payment_status,
-            exit_face_evidence_id=payload.face_image_id if payload.face_mock_id else payload.face_evidence_id,
+            exit_face_evidence_id=face_reference_id,
             exit_plate_evidence_id=payload.plate_image_id or payload.plate_evidence_id,
         )
         self.payment_repository.close_visitor_session(
@@ -151,7 +164,7 @@ class ExitService:
             exit_time=session_record.get("exit_time"),
         )
         self.evidence_service.link_evidence_to_session(
-            payload.face_image_id if payload.face_mock_id else payload.face_evidence_id,
+            face_reference_id,
             session_record["session_id"],
             normalized_plate,
         )
@@ -166,6 +179,7 @@ class ExitService:
             session_record=session_record,
             action="parking.exit.authorized.visitor",
             event_reason="exit_granted",
+            face_validation=face_match,
             extra_metadata={
                 "payment_status_before": visitor_session.get("payment_status"),
                 "payment_status_after": effective_payment_status,
@@ -178,11 +192,18 @@ class ExitService:
             },
         )
 
-    def _process_registered_exit(self, payload: ParkingExitRequest, normalized_plate: str) -> ParkingExitResponse:
+    def _process_registered_exit(
+        self,
+        payload: ParkingExitRequest,
+        normalized_plate: str,
+        active_session: dict | None = None,
+        face_reference_id: str | None = None,
+    ) -> ParkingExitResponse:
+        authorization_face_hint = payload.face_mock_id if settings.face_service_mode.lower() == "mock" else ""
         authorization = self.vehicle_authorization_repository.validate_registered_exit(
             university_id=payload.university_id,
             plate_text=normalized_plate,
-            face_image_id=payload.face_mock_id or payload.face_image_id,
+            face_image_id=authorization_face_hint,
         )
         if not authorization["plate_exists"]:
             return self._reject(
@@ -203,26 +224,57 @@ class ExitService:
                 reason="Permission is not valid",
             )
 
-        face_match = self.face_service.validate_registered_face(
-            face_image_id=payload.face_mock_id or payload.face_image_id,
-            confidence_face=payload.confidence_face,
-            min_confidence=settings.min_face_confidence,
+        if active_session is not None:
+            face_match = self.face_service.verify_session_face(
+                university_id=payload.university_id,
+                session_id=active_session["session_id"],
+                face_image_id=payload.face_image_id,
+                gate_id=payload.gate_id,
+                confidence_face=payload.confidence_face,
+                min_confidence=settings.min_face_confidence,
+            )
+        else:
+            face_match = self.face_service.validate_registered_face(
+                university_id=payload.university_id,
+                face_image_id=payload.face_image_id,
+                confidence_face=payload.confidence_face,
+                min_confidence=settings.min_face_confidence,
+            )
+        print(
+            "parking-service registered_exit_face_validation "
+            f"session_id={active_session['session_id'] if active_session else None} image_id={payload.face_image_id} "
+            f"detected={face_match.get('detected')} match={face_match.get('match')} "
+            f"similarity={face_match.get('similarity')} threshold={face_match.get('threshold')} "
+            f"provider={face_match.get('provider')} model_name={face_match.get('model_name')} "
+            f"bounding_box={face_match.get('bounding_box')} warnings={face_match.get('warnings')}"
         )
         if not face_match["accepted"]:
             return self._reject(
                 payload=payload,
                 normalized_plate=normalized_plate,
-                reason="Face confidence too low",
+                reason="Face verification failed",
+                session_id=active_session["session_id"] if active_session else None,
+                face_validation=face_match,
             )
 
-        session_record = self.parking_session_repository.create_registered_exit_record(
-            plate_text=normalized_plate,
-            person_type=authorization["person_type"],
-            exit_face_evidence_id=payload.face_image_id if payload.face_mock_id else payload.face_evidence_id,
-            exit_plate_evidence_id=payload.plate_image_id or payload.plate_evidence_id,
-        )
+        if active_session is not None:
+            session_record = self.parking_session_repository.close_session(
+                session_id=active_session["session_id"],
+                plate_text=normalized_plate,
+                person_type=authorization["person_type"],
+                payment_status=active_session.get("payment_status", "NOT_REQUIRED"),
+                exit_face_evidence_id=face_reference_id,
+                exit_plate_evidence_id=payload.plate_image_id or payload.plate_evidence_id,
+            )
+        else:
+            session_record = self.parking_session_repository.create_registered_exit_record(
+                plate_text=normalized_plate,
+                person_type=authorization["person_type"],
+                exit_face_evidence_id=face_reference_id,
+                exit_plate_evidence_id=payload.plate_image_id or payload.plate_evidence_id,
+            )
         self.evidence_service.link_evidence_to_session(
-            payload.face_image_id if payload.face_mock_id else payload.face_evidence_id,
+            face_reference_id,
             session_record["session_id"],
             normalized_plate,
         )
@@ -237,6 +289,7 @@ class ExitService:
             session_record=session_record,
             action="parking.exit.authorized.registered",
             event_reason="exit_granted",
+            face_validation=face_match,
         )
 
     def _authorize_exit(
@@ -246,6 +299,7 @@ class ExitService:
         session_record: dict,
         action: str,
         event_reason: str,
+        face_validation: dict | None = None,
         extra_metadata: dict | None = None,
     ) -> ParkingExitResponse:
         gate_command = self.iot_repository.open_gate(
@@ -292,6 +346,7 @@ class ExitService:
             message="Vehicle exit authorized",
             session=SessionData(**session_record),
             gate_command=GateCommand(**gate_command),
+            face_validation=FaceValidationResult(**face_validation) if face_validation else None,
             access_event_id=access_event["id"],
             audit_log_id=audit_log["id"],
             incident_id=None,
@@ -307,6 +362,7 @@ class ExitService:
         publish_status: bool = False,
         event_type: str = "exit",
         status_reason: str | None = None,
+        face_validation: dict | None = None,
         extra_metadata: dict | None = None,
     ) -> ParkingExitResponse:
         access_event = self.access_event_repository.create_exit_event(
@@ -361,7 +417,11 @@ class ExitService:
             message=reason,
             session=None,
             gate_command=None,
+            face_validation=FaceValidationResult(**face_validation) if face_validation else None,
             access_event_id=access_event["id"],
             audit_log_id=audit_log["id"],
             incident_id=incident_id,
         )
+
+    def _resolve_face_reference_id(self, payload: ParkingExitRequest) -> str:
+        return payload.face_image_id or payload.face_evidence_id or payload.face_mock_id or ""

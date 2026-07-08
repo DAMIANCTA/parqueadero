@@ -1,3 +1,5 @@
+import uuid
+
 from config import settings
 from repositories.access_event_repository import AccessEventRepository
 from repositories.audit_log_repository import AuditLogRepository
@@ -6,7 +8,7 @@ from repositories.parking_session_repository import ParkingSessionRepository
 from repositories.payment_repository import PaymentRepository
 from repositories.plate_repository import PlateRepository
 from repositories.vehicle_authorization_repository import VehicleAuthorizationRepository
-from schemas.parking import GateCommand, ParkingEntryRequest, ParkingEntryResponse, SessionData
+from schemas.parking import FaceValidationResult, GateCommand, ParkingEntryRequest, ParkingEntryResponse, SessionData
 from services.evidence_storage_service import EvidenceStorageService
 from services.face_validation_service import FaceValidationService
 
@@ -25,7 +27,7 @@ class EntryService:
 
     def process_entry(self, payload: ParkingEntryRequest) -> ParkingEntryResponse:
         face_mock_id = payload.face_mock_id or payload.face_image_id
-        face_image_id = payload.face_image_id if payload.face_mock_id else payload.face_evidence_id
+        face_image_id = payload.face_image_id
         plate_image_id = payload.plate_image_id or payload.plate_evidence_id
         try:
             normalized_plate = self.plate_repository.normalize_and_validate(
@@ -47,18 +49,6 @@ class EntryService:
                 reason="Liveness score too low",
             )
 
-        face_validation = self.face_service.validate_entry_face(
-            face_image_id=face_mock_id,
-            confidence_face=payload.confidence_face,
-            min_confidence=settings.min_face_confidence,
-        )
-        if not face_validation["accepted"]:
-            return self._reject(
-                payload=payload,
-                normalized_plate=normalized_plate,
-                reason="Face confidence too low",
-            )
-
         if payload.person_type != "visitor":
             authorization = self.vehicle_authorization_repository.validate_plate_authorization(
                 university_id=payload.university_id,
@@ -72,6 +62,32 @@ class EntryService:
                     reason="Plate is not authorized for this person type",
                 )
 
+        session_id = str(uuid.uuid4())
+        face_validation = self.face_service.validate_entry_face(
+            university_id=payload.university_id,
+            session_id=session_id,
+            face_image_id=face_image_id,
+            confidence_face=payload.confidence_face,
+            min_confidence=settings.min_face_confidence,
+        )
+        print(
+            "parking-service entry_face_validation "
+            f"session_id={session_id} image_id={face_image_id} "
+            f"detected={face_validation.get('detected')} "
+            f"provider={face_validation.get('provider')} "
+            f"model_name={face_validation.get('model_name')} "
+            f"bounding_box={face_validation.get('bounding_box')} "
+            f"embedding_size={face_validation.get('embedding_size')} "
+            f"warnings={face_validation.get('warnings')}"
+        )
+        if not face_validation["accepted"]:
+            return self._reject(
+                payload=payload,
+                normalized_plate=normalized_plate,
+                reason="Face detection failed",
+                face_validation=face_validation,
+            )
+
         session_record = self.parking_session_repository.create_entry_session(
             university_id=payload.university_id,
             campus_id=payload.campus_id,
@@ -81,6 +97,7 @@ class EntryService:
             entry_face_image_id=face_mock_id,
             entry_face_evidence_id=face_image_id,
             entry_plate_evidence_id=plate_image_id,
+            session_id=session_id,
         )
         self.parking_session_repository.attach_evidence(
             session_record["session_id"],
@@ -132,11 +149,18 @@ class EntryService:
             message="Vehicle entry authorized",
             session=SessionData(**session_record),
             gate_command=GateCommand(**gate_command),
+            face_validation=FaceValidationResult(**face_validation),
             access_event_id=access_event["id"],
             audit_log_id=audit_log["id"],
         )
 
-    def _reject(self, payload: ParkingEntryRequest, normalized_plate: str, reason: str) -> ParkingEntryResponse:
+    def _reject(
+        self,
+        payload: ParkingEntryRequest,
+        normalized_plate: str,
+        reason: str,
+        face_validation: dict | None = None,
+    ) -> ParkingEntryResponse:
         access_event = self.access_event_repository.create_entry_event(
             university_id=payload.university_id,
             gate_id=payload.gate_id,
@@ -166,6 +190,7 @@ class EntryService:
             message=reason,
             session=None,
             gate_command=None,
+            face_validation=FaceValidationResult(**face_validation) if face_validation else None,
             access_event_id=access_event["id"],
             audit_log_id=audit_log["id"],
         )

@@ -8,6 +8,7 @@ from schemas.integration import (
     DemoOpenGateRequest,
     DemoOpenGateResponse,
     EvidenceUploadResponse,
+    FaceServiceConfigResponse,
     ParkingAuthorizationResponse,
     PlateDetectBatchRequest,
     PlateDetectBatchResponse,
@@ -139,3 +140,14 @@ def detect_plate_batch(payload: PlateDetectBatchRequest) -> PlateDetectBatchResp
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Plate service unavailable: {exc}") from exc
     return PlateDetectBatchResponse(**response)
+
+
+@router.get("/faces/config", response_model=FaceServiceConfigResponse)
+def get_face_config() -> FaceServiceConfigResponse:
+    try:
+        response = integration_service.get_face_config()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Face service unavailable: {exc}") from exc
+    return FaceServiceConfigResponse(**response)

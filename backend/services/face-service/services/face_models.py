@@ -24,11 +24,31 @@ class FaceEmbedding:
 
 
 @dataclass(slots=True)
+class FaceBoundingBox:
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+@dataclass(slots=True)
+class FaceAnalysisResult:
+    detected: bool
+    embedding: FaceEmbedding | None
+    bounding_box: FaceBoundingBox | None
+    provider_name: str
+    mode_used: str
+    warnings: list[str]
+
+
+@dataclass(slots=True)
 class ComparisonResult:
     match: bool
     score: float
     threshold: float
     model_name: str
+    metric: str = "similarity"
+    operator: str = "gte"
 
 
 @dataclass(slots=True)
