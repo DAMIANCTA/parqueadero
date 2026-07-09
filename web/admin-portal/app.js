@@ -16,6 +16,11 @@ const state = {
   activeSessions: [],
   sessionHistory: [],
   auditEvents: [],
+  iot: {
+    gateId: localStorage.getItem("smartParkingIotGateId") || "garita-01",
+    status: null,
+    message: "",
+  },
   members: [],
   vehicles: [],
   permits: [],
@@ -55,6 +60,7 @@ async function refreshOverview() {
     loadActiveSessions(),
     loadSessionHistory(),
     loadAuditEvents(),
+    loadIotGateStatus(),
   ];
   if (state.auth.token) {
     jobs.push(loadMembers(), loadVehicles(), loadMonthlyPermits(), loadFaceProfiles());
@@ -84,6 +90,12 @@ async function loadAuditEvents() {
   const response = await fetch(api("/admin/audit-events"));
   const body = await response.json();
   state.auditEvents = body.items || [];
+}
+
+async function loadIotGateStatus() {
+  const response = await fetch(api(`/iot/gates/status/${encodeURIComponent(state.iot.gateId)}`));
+  const body = await response.json();
+  state.iot.status = body;
 }
 
 async function loadMembers() {
@@ -174,6 +186,52 @@ function logoutCashier() {
   sessionStorage.removeItem("smartParkingAdminToken");
   sessionStorage.removeItem("smartParkingAdminUsername");
   sessionStorage.removeItem("smartParkingAdminRoles");
+  render();
+}
+
+async function triggerIotCommand(action) {
+  if (!state.auth.token) {
+    state.iot.message = "Inicia sesion para enviar comandos manuales a la garita.";
+    render();
+    return;
+  }
+  state.iot.message = action === "open" ? "Enviando apertura manual..." : "Enviando denegacion/cierre...";
+  render();
+  try {
+    const response = await fetch(api(`/iot/gates/${encodeURIComponent(state.iot.gateId)}/${action}`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({
+        university_id: "uce",
+        campus_id: "matriz",
+        plate: state.currentSession?.plate_text || "MANUAL",
+        session_id: state.currentSession?.session_id || null,
+        reason: action === "open" ? "manual_open_admin_portal" : "manual_deny_admin_portal",
+      }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(localizeBackendMessage(parseDetail(body.detail) || "No se pudo enviar el comando IoT."));
+    }
+    state.iot.message =
+      action === "open"
+        ? `Comando ABRIR enviado a ${state.iot.gateId}.`
+        : `Comando DENEGAR enviado a ${state.iot.gateId}.`;
+    await loadIotGateStatus();
+  } catch (error) {
+    state.iot.message = error.message || "No se pudo enviar el comando IoT.";
+  }
+  render();
+}
+
+async function saveIotGateId(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const gateId = String(form.gate_id.value || "").trim() || "garita-01";
+  state.iot.gateId = gateId;
+  localStorage.setItem("smartParkingIotGateId", gateId);
+  state.iot.message = `Garita activa: ${gateId}.`;
+  await loadIotGateStatus();
   render();
 }
 
@@ -533,6 +591,7 @@ function buildSidebar() {
     ["cashier", "Caja / Pagos"],
     ["active", "Sesiones activas"],
     ["history", "Historial"],
+    ["iot", "Garitas / IoT"],
     ["members", "Miembros"],
     ["vehicles", "Vehiculos"],
     ["faces", "Rostros"],
@@ -571,6 +630,7 @@ function buildTopbar() {
     cashier: ["Caja / Pagos", "Busca sesiones activas por placa y registra pagos congelando el monto."],
     active: ["Sesiones activas", "Vehiculos actualmente dentro del parqueadero."],
     history: ["Historial", "Sesiones ya cerradas con salida registrada."],
+    iot: ["Garitas / IoT", "Estado MQTT de la maqueta fisica y control manual de barrera."],
     members: ["Miembros universidad", "Registro de estudiantes, docentes y personal con estado activo."],
     vehicles: ["Vehiculos autorizados", "Registro de placas institucionales y asignacion a personas."],
     faces: ["Rostros registrados", "Carga evidencia de rostro y enrola contra face-service."],
@@ -596,6 +656,7 @@ function buildSection() {
   if (state.section === "cashier") return buildCashierSection();
   if (state.section === "active") return buildActiveSection();
   if (state.section === "history") return buildHistorySection();
+  if (state.section === "iot") return buildIotSection();
   if (state.section === "members") return buildMembersSection();
   if (state.section === "vehicles") return buildVehiclesSection();
   if (state.section === "faces") return buildFacesSection();
@@ -719,6 +780,72 @@ function buildHistorySection() {
           ]),
         )
       : el("p", { className: "empty-state", text: "Todavia no hay sesiones cerradas." }),
+  ]);
+}
+
+function buildIotSection() {
+  const gate = state.iot.status || {};
+  const mqttConnected = Boolean(gate.mqtt_connected);
+  return el("div", { className: "grid two" }, [
+    el("section", { className: "panel" }, [
+      panelHeader("Estado de garita", "Consulta el ultimo estado recibido desde MQTT.", async () => {
+        await loadIotGateStatus();
+      }),
+      buildIotGateForm(),
+      el("div", { className: "grid" }, [
+        el("div", { className: "card" }, [
+          el("h3", { text: "Conexion MQTT" }),
+          el("div", { className: "actions" }, [
+            statusPill(mqttConnected ? "CONNECTED" : "OFFLINE"),
+            el("span", { className: `badge ${mqttConnected ? "success" : "warn"}`, text: state.iot.gateId }),
+          ]),
+          helperText(`Comando topic: ${gate.command_topic || "ucepark/garita/comandos"}`),
+          helperText(`Evento topic: ${gate.event_topic || "ucepark/garita/eventos"}`),
+        ]),
+        el("div", { className: "card" }, [
+          el("h3", { text: "Ultimo estado" }),
+          el("dl", { className: "details" }, [
+            detail("Estado", gate.status || "IDLE"),
+            detail("Ultimo evento", gate.last_event_type || "-"),
+            detail("Payload", gate.last_event_payload || "-"),
+            detail("Ultima presencia", formatDateTime(gate.last_presence_at)),
+            detail("Ultimo comando", gate.last_command || "-"),
+            detail("Hora comando", formatDateTime(gate.last_command_at)),
+            detail("Motivo", gate.last_reason || "-"),
+            detail("Actualizado", formatDateTime(gate.last_updated_at)),
+          ]),
+        ]),
+      ]),
+      state.iot.message ? el("p", { className: "helper", text: state.iot.message }) : null,
+    ].filter(Boolean)),
+    el("section", { className: "panel" }, [
+      sectionHeader("Control manual", "Abre o deniega la barrera usando el API Gateway y MQTT."),
+      el("div", { className: "actions" }, [
+        el("button", {
+          className: "button primary",
+          type: "button",
+          text: "Abrir manual",
+          onclick: () => triggerIotCommand("open"),
+        }),
+        el("button", {
+          className: "button secondary",
+          type: "button",
+          text: "Denegar / Cerrar",
+          onclick: () => triggerIotCommand("deny"),
+        }),
+      ]),
+      helperText(
+        state.auth.token
+          ? "La orden manual se firma con el usuario autenticado del portal."
+          : "Para abrir o denegar manualmente debes iniciar sesion.",
+      ),
+      el("div", { className: "card" }, [
+        el("h3", { text: "Referencia operativa" }),
+        helperText(
+          "La garita fisica escucha ABRIR y DENEGAR en ucepark/garita/comandos y publica PRESENCIA en ucepark/garita/eventos.",
+        ),
+      ]),
+    ]),
   ]);
 }
 
@@ -875,10 +1002,27 @@ function buildSettingsSection() {
         el("span", { className: "badge neutral", text: `GET ${api("/health")}` }),
         el("span", { className: "badge neutral", text: `GET ${api("/admin/dashboard-summary")}` }),
         el("span", { className: "badge neutral", text: `GET ${api("/payments/by-plate/VISPEND")}` }),
+        el("span", { className: "badge neutral", text: `GET ${api(`/iot/gates/status/${state.iot.gateId}`)}` }),
         state.globalMessage ? el("p", { className: "helper", text: state.globalMessage }) : null,
       ].filter(Boolean)),
     ]),
   ]);
+}
+
+function buildIotGateForm() {
+  const form = el("form", { className: "grid" });
+  form.addEventListener("submit", saveIotGateId);
+  form.append(
+    field("Gate ID", input("text", "gate_id", state.iot.gateId, null, "garita-01")),
+    el("div", { className: "actions" }, [
+      el("button", { className: "button primary", type: "submit", text: "Guardar garita" }),
+      actionButton("Recargar estado", async () => {
+        await loadIotGateStatus();
+        render();
+      }),
+    ]),
+  );
+  return form;
 }
 
 function buildLoginForm() {
@@ -1150,6 +1294,10 @@ function actionButton(text, handler) {
   return el("button", { className: "button secondary", type: "button", text, onclick: handler });
 }
 
+function helperText(text) {
+  return el("p", { className: "helper", text });
+}
+
 function statusPill(status) {
   return el("span", {
     className: `status-pill ${String(status || "neutral").toLowerCase()}`,
@@ -1280,6 +1428,7 @@ function localizeBackendMessage(message) {
   }
   if (text === "Bearer token required") return "Debes iniciar sesion para realizar esta accion.";
   if (text.includes("Missing permissions")) return "Tu usuario no tiene permisos para registrar pagos.";
+  if (text.includes("iot")) return "No se pudo completar la operacion IoT solicitada.";
   return text;
 }
 

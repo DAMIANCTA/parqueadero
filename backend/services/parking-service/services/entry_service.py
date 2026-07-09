@@ -226,12 +226,20 @@ class EntryService:
                 "plate_override_reason": payload.plate_override_reason,
             },
         )
+        gate_command = self.iot_repository.deny_gate(
+            university_id=payload.university_id,
+            campus_id=payload.campus_id,
+            gate_id=payload.gate_id,
+            plate_text=normalized_plate,
+            session_id=None,
+            reason=reason,
+        )
         return ParkingEntryResponse(
             authorized=False,
             status="REJECTED",
             message=reason,
             session=None,
-            gate_command=None,
+            gate_command=GateCommand(**gate_command),
             face_validation=FaceValidationResult(**face_validation) if face_validation else None,
             access_event_id=access_event["id"],
             audit_log_id=audit_log["id"],

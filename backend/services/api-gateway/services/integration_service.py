@@ -108,29 +108,31 @@ class IntegrationService:
 
     def open_demo_gate(self, payload: DemoOpenGateRequest) -> dict:
         demo_event_id = f"demo-{uuid.uuid4()}"
-        downstream = self._post_json(
-            self.targets["iot"],
-            "/api/v1/gates/open",
+        downstream = self.open_iot_gate(
+            payload.gate_id,
             {
                 "university_id": payload.university_id,
                 "campus_id": payload.campus_id,
-                "gate_id": payload.gate_id,
                 "plate": payload.plate,
                 "session_id": demo_event_id,
                 "reason": "demo_validated",
-                "command": "open",
             },
-            permissions=["iot.gates.open"],
         )
         return {
             "status": "OPEN_COMMAND_SENT",
             "message": "La barrera demo fue enviada a abrir.",
             "demo_event_id": demo_event_id,
             "topic": downstream["topic"],
-            "status_topic": downstream["status_topic"],
+            "status_topic": downstream["event_topic"],
             "command": downstream["command"],
             "published": downstream["published"],
-            "payload": downstream["payload"],
+            "payload": {
+                "command": downstream["command"],
+                "command_code": downstream["command_code"],
+                "plate": payload.plate,
+                "session_id": demo_event_id,
+                "reason": "demo_validated",
+            },
         }
 
     def pay_session_by_plate(self, payload: PaymentByPlateRequest) -> dict:
@@ -154,6 +156,29 @@ class IntegrationService:
             "/payments/register-cash-payment",
             payload.model_dump(),
             permissions=["payments.pay"],
+        )
+
+    def open_iot_gate(self, gate_id: str, payload: dict) -> dict:
+        return self._post_json(
+            self.targets["iot"],
+            f"/gates/{gate_id}/open",
+            payload,
+            permissions=["iot.gates.open"],
+        )
+
+    def deny_iot_gate(self, gate_id: str, payload: dict) -> dict:
+        return self._post_json(
+            self.targets["iot"],
+            f"/gates/{gate_id}/deny",
+            payload,
+            permissions=["iot.gates.deny"],
+        )
+
+    def get_iot_gate_status(self, gate_id: str) -> dict:
+        return self._get_json(
+            self.targets["iot"],
+            f"/gates/{gate_id}/status",
+            permissions=["iot.gates.read"],
         )
 
     def get_admin_dashboard_summary(self) -> dict:

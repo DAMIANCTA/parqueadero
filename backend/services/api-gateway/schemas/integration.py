@@ -52,6 +52,14 @@ class SessionData(BaseModel):
     payment_status: str
     person_type: str | None = None
     plate_text: str
+    access_type: str | None = None
+    person_id: str | None = None
+    person_name: str | None = None
+    role_type: str | None = None
+    vehicle_id: str | None = None
+    permit_status: str | None = None
+    entry_time: str | None = None
+    exit_time: str | None = None
 
 
 class GateCommand(BaseModel):
@@ -67,6 +75,7 @@ class FaceValidationResponse(BaseModel):
     detected: bool
     match: bool | None = None
     similarity: float | None = Field(default=None, ge=0, le=1)
+    distance: float | None = None
     threshold: float | None = Field(default=None, ge=0, le=1)
     image_id: str | None = None
     template_id: str | None = None
@@ -139,6 +148,52 @@ class CashierPaymentLookupResponse(BaseModel):
     payment_method: str | None = None
     payment_valid_until: str | None = None
     receipt_number: str | None = None
+    access_type: str | None = None
+    person_id: str | None = None
+    person_name: str | None = None
+    role_type: str | None = None
+    permit_status: str | None = None
+
+
+class IotGateCommandRequest(BaseModel):
+    university_id: str | None = None
+    campus_id: str | None = None
+    plate: str | None = Field(default=None, min_length=3, max_length=20)
+    session_id: str | None = None
+    reason: str = Field(min_length=3, max_length=120)
+
+
+class IotGateCommandResponse(BaseModel):
+    gate_id: str
+    status: str
+    command: str
+    command_code: str
+    published: bool
+    topic: str
+    mqtt_connected: bool
+    payload: str
+    event_topic: str
+    timestamp: str
+    reason: str
+
+
+class IotGateStatusResponse(BaseModel):
+    gate_id: str
+    status: str
+    mqtt_connected: bool
+    command_topic: str
+    event_topic: str
+    last_event_type: str | None = None
+    last_event_payload: str | None = None
+    last_presence_at: str | None = None
+    last_command: str | None = None
+    last_command_at: str | None = None
+    last_updated_at: str | None = None
+    last_reason: str | None = None
+    university_id: str | None = None
+    campus_id: str | None = None
+    plate: str | None = None
+    session_id: str | None = None
 
 
 class CashierPaymentRegistrationRequest(BaseModel):

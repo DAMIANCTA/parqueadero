@@ -50,7 +50,7 @@ app.add_middleware(
         "/admin-portal/styles.css",
         "/admin-portal/app.js",
     },
-    public_path_prefixes=("/payments/by-plate/",),
+    public_path_prefixes=("/payments/by-plate/", "/iot/gates/status/"),
 )
 app.add_middleware(
     RateLimitMiddleware,

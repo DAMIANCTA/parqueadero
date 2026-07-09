@@ -17,6 +17,9 @@ from schemas.integration import (
     EvidenceUploadResponse,
     FaceServiceConfigResponse,
     GatewayTokenResponse,
+    IotGateCommandRequest,
+    IotGateCommandResponse,
+    IotGateStatusResponse,
     LoginRequest,
     MemberAccessValidationRequest,
     MemberAccessValidationResponse,
@@ -107,6 +110,39 @@ def demo_open_gate(payload: DemoOpenGateRequest) -> DemoOpenGateResponse:
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"IoT service unavailable: {exc}") from exc
     return DemoOpenGateResponse(**response)
+
+
+@router.post("/iot/gates/{gate_id}/open", response_model=IotGateCommandResponse, dependencies=[require_permissions("iot.gates.open")])
+def open_iot_gate(gate_id: str, payload: IotGateCommandRequest) -> IotGateCommandResponse:
+    try:
+        response = integration_service.open_iot_gate(gate_id, payload.model_dump())
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"IoT service unavailable: {exc}") from exc
+    return IotGateCommandResponse(**response)
+
+
+@router.post("/iot/gates/{gate_id}/deny", response_model=IotGateCommandResponse, dependencies=[require_permissions("iot.gates.deny")])
+def deny_iot_gate(gate_id: str, payload: IotGateCommandRequest) -> IotGateCommandResponse:
+    try:
+        response = integration_service.deny_iot_gate(gate_id, payload.model_dump())
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"IoT service unavailable: {exc}") from exc
+    return IotGateCommandResponse(**response)
+
+
+@router.get("/iot/gates/status/{gate_id}", response_model=IotGateStatusResponse)
+def get_iot_gate_status(gate_id: str) -> IotGateStatusResponse:
+    try:
+        response = integration_service.get_iot_gate_status(gate_id)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"IoT service unavailable: {exc}") from exc
+    return IotGateStatusResponse(**response)
 
 
 @router.post("/payments/pay-by-plate", response_model=PaymentByPlateResponse)

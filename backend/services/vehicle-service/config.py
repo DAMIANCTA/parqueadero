@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     service_name: str = "vehicle-service"
     service_version: str = "0.1.0"
     environment: str = "local"
+    face_service_mode: str = "hybrid"
     face_service_url: str = "http://face-service:8000"
     face_service_timeout_seconds: float = 10.0
     face_similarity_threshold: float = 0.82

@@ -361,19 +361,24 @@ th {
 
 .status-pill.paid,
 .status-pill.authorized,
-.status-pill.inside {
+.status-pill.inside,
+.status-pill.connected,
+.status-pill.opened {
   background: var(--success-soft);
   color: #176f3d;
 }
 
 .status-pill.outside,
-.status-pill.neutral {
+.status-pill.neutral,
+.status-pill.presence_detected {
   background: #edf2f1;
   color: #52615f;
 }
 
 .status-pill.rejected,
-.status-pill.failed {
+.status-pill.failed,
+.status-pill.denied,
+.status-pill.offline {
   background: var(--danger-soft);
   color: #8b1f1f;
 }

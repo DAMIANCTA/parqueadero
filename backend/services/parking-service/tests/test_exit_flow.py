@@ -72,6 +72,7 @@ class ParkingExitFlowTests(unittest.TestCase):
         self.assertEqual(payload["status"], "REJECTED")
         self.assertEqual(payload["message"], "Payment status is not PAID")
         self.assertIsNotNone(payload["incident_id"])
+        self.assertEqual(payload["gate_command"]["command"], "deny")
 
     def test_registered_exit_authorizes_when_plate_face_and_permission_are_valid(self) -> None:
         response = self.client.post(
@@ -116,6 +117,7 @@ class ParkingExitFlowTests(unittest.TestCase):
         payload = response.json()
         self.assertFalse(payload["authorized"])
         self.assertEqual(payload["message"], "Permission is not valid")
+        self.assertEqual(payload["gate_command"]["command"], "deny")
 
     def test_visitor_exit_rejects_when_payment_grace_period_expired(self) -> None:
         with patch(
@@ -147,6 +149,7 @@ class ParkingExitFlowTests(unittest.TestCase):
         payload = response.json()
         self.assertFalse(payload["authorized"])
         self.assertEqual(payload["message"], "Payment grace period expired")
+        self.assertEqual(payload["gate_command"]["command"], "deny")
 
 
 if __name__ == "__main__":

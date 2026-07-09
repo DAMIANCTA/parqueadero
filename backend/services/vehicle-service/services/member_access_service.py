@@ -1,5 +1,8 @@
+import logging
+
 from fastapi import HTTPException
 
+from config import settings
 from repositories.biometric_repository import BiometricEvidenceRepository
 from repositories.face_service_repository import FaceServiceRepository
 from repositories.member_repository import MemberRepository
@@ -23,6 +26,9 @@ from schemas.members import (
     VehicleLookupResponse,
     VehicleResponse,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class MemberAccessService:
@@ -183,6 +189,17 @@ class MemberAccessService:
                 continue
 
             for profile in profiles:
+                if settings.face_service_mode.lower() != "mock" and profile.get("provider") == "mock-face-service":
+                    warnings.append(f"MOCK_FACE_PROFILE_SKIPPED:{person['id']}")
+                    logger.info(
+                        "vehicle-service member_access skipping_mock_profile person_id=%s profile_id=%s provider=%s face_image_id=%s template_id=%s",
+                        person["id"],
+                        profile.get("id"),
+                        profile.get("provider"),
+                        profile.get("face_image_id"),
+                        profile.get("template_id"),
+                    )
+                    continue
                 try:
                     comparison = self.face_service.compare_images(
                         university_id=payload.university_id,

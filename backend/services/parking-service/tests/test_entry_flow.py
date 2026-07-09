@@ -97,6 +97,7 @@ class ParkingEntryFlowTests(unittest.TestCase):
         self.assertFalse(payload["authorized"])
         self.assertEqual(payload["status"], "REJECTED")
         self.assertEqual(payload["message"], "Liveness score too low")
+        self.assertEqual(payload["gate_command"]["command"], "deny")
 
     def test_registered_member_plate_is_rejected_when_face_fails(self) -> None:
         response = self.client.post(
@@ -120,6 +121,7 @@ class ParkingEntryFlowTests(unittest.TestCase):
         self.assertFalse(payload["authorized"])
         self.assertEqual(payload["status"], "REJECTED")
         self.assertIn("Face", payload["message"])
+        self.assertEqual(payload["gate_command"]["command"], "deny")
 
 
 if __name__ == "__main__":

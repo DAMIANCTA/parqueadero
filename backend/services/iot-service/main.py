@@ -30,3 +30,17 @@ app.add_middleware(
 )
 app.include_router(router)
 app.include_router(iot_router)
+
+
+@app.on_event("startup")
+def startup_event() -> None:
+    from routes.iot import mqtt_service
+
+    mqtt_service.start_listener()
+
+
+@app.on_event("shutdown")
+def shutdown_event() -> None:
+    from routes.iot import mqtt_service
+
+    mqtt_service.stop_listener()
