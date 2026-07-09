@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 PaymentMethod = Literal["cash", "card", "transfer", "mobile", "online", "other"]
-PaymentStatus = Literal["PENDING", "PAID", "FAILED", "CANCELLED", "REFUNDED"]
+PaymentStatus = Literal["PENDING", "PAID", "NOT_REQUIRED", "FAILED", "CANCELLED", "REFUNDED"]
 
 
 class SessionPaymentDetail(BaseModel):
@@ -130,3 +130,35 @@ class InternalSessionCloseRequest(BaseModel):
     payment_status: PaymentStatus = "PAID"
     exit_time: datetime
     session_status: str = "OUTSIDE"
+
+
+class AdminDashboardSummaryResponse(BaseModel):
+    active_sessions: int
+    vehicles_inside: int
+    pending_payments: int
+    paid_today: int
+    revenue_today: float
+    authorized_exits_today: int
+    rejected_exits_today: int = 0
+
+
+class AdminSessionItem(BaseModel):
+    session_id: str
+    plate_text: str
+    entry_time: datetime
+    exit_time: datetime | None = None
+    duration_minutes: int
+    amount: float
+    currency: str
+    payment_status: PaymentStatus
+    session_status: str
+    payment_method: PaymentMethod | None = None
+    paid_at: datetime | None = None
+    paid_amount: float | None = None
+    payment_valid_until: datetime | None = None
+    receipt_number: str | None = None
+
+
+class AdminSessionListResponse(BaseModel):
+    total: int
+    items: list[AdminSessionItem]

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from config import settings
+from routes.members import router as members_router
 from security import AuditLogMiddleware, AuthenticationMiddleware, RateLimitMiddleware
 from routes.system import router
 
@@ -28,3 +29,4 @@ app.add_middleware(
     excluded_paths={"/health", "/version"},
 )
 app.include_router(router)
+app.include_router(members_router)

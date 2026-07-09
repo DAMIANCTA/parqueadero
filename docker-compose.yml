@@ -79,6 +79,8 @@ services:
     env_file: .env
     ports:
       - "${API_GATEWAY_PORT}:8000"
+    volumes:
+      - ./web/admin-portal:/app/web/admin-portal:ro
     depends_on:
       - auth-service
       - university-service

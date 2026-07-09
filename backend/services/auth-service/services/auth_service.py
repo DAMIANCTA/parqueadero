@@ -11,7 +11,12 @@ ROLE_PERMISSIONS = {
     "admin_university": [
         "gateway.catalog.read",
         "universities.read",
+        "members.read",
+        "members.write",
         "vehicles.read",
+        "vehicles.write",
+        "permits.read",
+        "permits.write",
         "parking.entry",
         "parking.exit",
         "payments.read",
@@ -28,7 +33,9 @@ ROLE_PERMISSIONS = {
     "security": [
         "gateway.catalog.read",
         "universities.read",
+        "members.read",
         "vehicles.read",
+        "permits.read",
         "parking.entry",
         "parking.exit",
         "faces.enroll",
@@ -38,10 +45,13 @@ ROLE_PERMISSIONS = {
         "plates.detect",
         "audit.read",
     ],
-    "cashier": ["payments.read", "payments.pay"],
+    "cashier": ["payments.read", "payments.pay", "permits.read", "permits.write", "members.read", "vehicles.read"],
     "gate_operator": [
         "parking.entry",
         "parking.exit",
+        "members.read",
+        "vehicles.read",
+        "permits.read",
         "faces.verify",
         "faces.compare",
         "faces.liveness_check",
@@ -52,7 +62,15 @@ ROLE_PERMISSIONS = {
     "teacher": [],
     "employee": [],
     "visitor": [],
-    "auditor": ["gateway.catalog.read", "universities.read", "vehicles.read", "payments.read", "audit.read"],
+    "auditor": [
+        "gateway.catalog.read",
+        "universities.read",
+        "members.read",
+        "vehicles.read",
+        "permits.read",
+        "payments.read",
+        "audit.read",
+    ],
 }
 
 

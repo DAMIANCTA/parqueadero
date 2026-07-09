@@ -153,6 +153,46 @@ class GatewayRouteTests(unittest.TestCase):
         self.assertTrue(body["success"])
         self.assertEqual(body["session"]["payment_status"], "PAID")
 
+    @patch("routes.integration.integration_service.issue_token")
+    def test_auth_token_proxy_returns_token(self, issue_token) -> None:
+        issue_token.return_value = {
+            "access_token": "token-123",
+            "token_type": "bearer",
+            "expires_in": 3600,
+            "roles": ["cashier"],
+            "permissions": ["payments.read", "payments.pay"],
+            "university_id": "demo",
+        }
+
+        response = self.client.post(
+            "/auth/token",
+            json={"username": "cashier.user", "password": "demo1234!"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["access_token"], "token-123")
+        self.assertEqual(body["roles"], ["cashier"])
+
+    @patch("routes.integration.integration_service.get_admin_dashboard_summary")
+    def test_admin_dashboard_summary_is_public_for_local_portal(self, get_admin_dashboard_summary) -> None:
+        get_admin_dashboard_summary.return_value = {
+            "active_sessions": 3,
+            "vehicles_inside": 3,
+            "pending_payments": 1,
+            "paid_today": 5,
+            "revenue_today": 7.5,
+            "authorized_exits_today": 4,
+            "rejected_exits_today": 1,
+        }
+
+        response = self.client.get("/admin/dashboard-summary")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["active_sessions"], 3)
+        self.assertEqual(body["rejected_exits_today"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

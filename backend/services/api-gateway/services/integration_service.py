@@ -7,13 +7,21 @@ from psycopg import connect
 
 from config import settings
 from schemas.integration import (
+    FaceEnrollMemberRequest,
+    FaceProfileListResponse,
     CashierPaymentRegistrationRequest,
     DemoOpenGateRequest,
+    LoginRequest,
+    MemberAccessValidationRequest,
+    MemberCreateRequest,
     ParkingEntryRequest,
     ParkingExitRequest,
+    MonthlyPermitCreateRequest,
     PaymentByPlateRequest,
     PlateDetectBatchRequest,
     PlateDetectRequest,
+    VehicleAuthorizationRequest,
+    VehicleCreateRequest,
 )
 from schemas.system import DependencyHealth
 from security import encode_access_token
@@ -32,6 +40,8 @@ class IntegrationService:
         self.plate_downstream_timeout = settings.downstream_plate_timeout_seconds
         self.evidence_downstream_timeout = settings.downstream_evidence_timeout_seconds
         self.targets = {
+            "auth": DownstreamTarget(name="auth-service", base_url=settings.auth_service_url.rstrip("/")),
+            "vehicle": DownstreamTarget(name="vehicle-service", base_url=settings.vehicle_service_url.rstrip("/")),
             "parking": DownstreamTarget(name="parking-service", base_url=settings.parking_service_url.rstrip("/")),
             "face": DownstreamTarget(name="face-service", base_url=settings.face_service_url.rstrip("/")),
             "plate": DownstreamTarget(name="plate-service", base_url=settings.plate_service_url.rstrip("/")),
@@ -80,6 +90,20 @@ class IntegrationService:
             "/parking/exit",
             payload.model_dump(),
             permissions=["parking.exit"],
+        )
+
+    def issue_token(self, payload: LoginRequest) -> dict:
+        return self._post_json_without_token(
+            self.targets["auth"],
+            "/auth/token",
+            payload.model_dump(),
+        )
+
+    def get_current_user(self, bearer_token: str) -> dict:
+        return self._get_json_with_passthrough_token(
+            self.targets["auth"],
+            "/auth/me",
+            bearer_token,
         )
 
     def open_demo_gate(self, payload: DemoOpenGateRequest) -> dict:
@@ -132,11 +156,100 @@ class IntegrationService:
             permissions=["payments.pay"],
         )
 
+    def get_admin_dashboard_summary(self) -> dict:
+        summary = self._get_json(
+            self.targets["payment"],
+            "/payments/admin/dashboard-summary",
+            permissions=["payments.read"],
+        )
+        audit_events = self.get_admin_audit_events(limit=200)
+        summary["rejected_exits_today"] = self._count_rejected_exits(audit_events.get("items", []))
+        return summary
+
+    def get_admin_active_sessions(self) -> dict:
+        return self._get_json(
+            self.targets["payment"],
+            "/payments/admin/active-sessions",
+            permissions=["payments.read"],
+        )
+
+    def get_admin_session_history(self) -> dict:
+        return self._get_json(
+            self.targets["payment"],
+            "/payments/admin/session-history",
+            permissions=["payments.read"],
+        )
+
+    def get_admin_audit_events(self, *, limit: int = 50) -> dict:
+        return self._get_json(
+            DownstreamTarget(name="audit-service", base_url=settings.audit_service_url.rstrip("/")),
+            f"/audit/logs?limit={limit}",
+            permissions=["audit.read"],
+        )
+
     def get_face_config(self) -> dict:
         return self._get_json(
             self.targets["face"],
             "/faces/config",
             permissions=["faces.verify"],
+        )
+
+    def create_member(self, payload: MemberCreateRequest) -> dict:
+        return self._post_json(self.targets["vehicle"], "/members", payload.model_dump(), permissions=["members.write"])
+
+    def list_members(self, university_id: str | None = None) -> dict:
+        suffix = f"?university_id={university_id}" if university_id else ""
+        return self._get_json(self.targets["vehicle"], f"/members{suffix}", permissions=["members.read"])
+
+    def get_member(self, member_id: str) -> dict:
+        return self._get_json(self.targets["vehicle"], f"/members/{member_id}", permissions=["members.read"])
+
+    def create_vehicle(self, payload: VehicleCreateRequest) -> dict:
+        return self._post_json(self.targets["vehicle"], "/vehicles", payload.model_dump(), permissions=["vehicles.write"])
+
+    def list_vehicles(self, university_id: str | None = None) -> dict:
+        suffix = f"?university_id={university_id}" if university_id else ""
+        return self._get_json(self.targets["vehicle"], f"/vehicles{suffix}", permissions=["vehicles.read"])
+
+    def get_vehicle_by_plate(self, plate_text: str) -> dict:
+        return self._get_json(self.targets["vehicle"], f"/vehicles/by-plate/{plate_text}", permissions=["vehicles.read"])
+
+    def enroll_member_face(self, member_id: str, payload: FaceEnrollMemberRequest) -> dict:
+        return self._post_json(
+            self.targets["vehicle"],
+            f"/members/{member_id}/faces/enroll",
+            payload.model_dump(),
+            permissions=["faces.enroll", "members.write"],
+        )
+
+    def list_face_profiles(self, university_id: str | None = None) -> dict:
+        suffix = f"?university_id={university_id}" if university_id else ""
+        return self._get_json(self.targets["vehicle"], f"/members/faces{suffix}", permissions=["members.read"])
+
+    def authorize_vehicle_person(self, vehicle_id: str, payload: VehicleAuthorizationRequest) -> dict:
+        return self._post_json(
+            self.targets["vehicle"],
+            f"/vehicles/{vehicle_id}/authorize-person",
+            payload.model_dump(),
+            permissions=["vehicles.write", "members.write"],
+        )
+
+    def create_monthly_permit(self, payload: MonthlyPermitCreateRequest) -> dict:
+        return self._post_json(self.targets["vehicle"], "/permits/monthly", payload.model_dump(mode="json"), permissions=["permits.write"])
+
+    def list_monthly_permits(self, university_id: str | None = None) -> dict:
+        suffix = f"?university_id={university_id}" if university_id else ""
+        return self._get_json(self.targets["vehicle"], f"/permits/monthly{suffix}", permissions=["permits.read"])
+
+    def get_permit_by_plate(self, plate_text: str) -> dict:
+        return self._get_json(self.targets["vehicle"], f"/permits/by-plate/{plate_text}", permissions=["permits.read"])
+
+    def validate_member_entry(self, payload: MemberAccessValidationRequest) -> dict:
+        return self._post_json(
+            self.targets["vehicle"],
+            "/access/validate-member-entry",
+            payload.model_dump(),
+            permissions=["members.read"],
         )
 
     def proxy_plate_detection(self, payload: PlateDetectRequest) -> dict:
@@ -268,6 +381,16 @@ class IntegrationService:
         response.raise_for_status()
         return response.json()
 
+    def _post_json_without_token(self, target: DownstreamTarget, path: str, payload: dict) -> dict:
+        with httpx.Client(timeout=self._build_timeout(self.default_downstream_timeout)) as client:
+            response = client.post(
+                f"{target.base_url}{path}",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+        response.raise_for_status()
+        return response.json()
+
     def _get_json(
         self,
         target: DownstreamTarget,
@@ -285,8 +408,26 @@ class IntegrationService:
         response.raise_for_status()
         return response.json()
 
+    def _get_json_with_passthrough_token(self, target: DownstreamTarget, path: str, bearer_token: str) -> dict:
+        with httpx.Client(timeout=self._build_timeout(self.default_downstream_timeout)) as client:
+            response = client.get(
+                f"{target.base_url}{path}",
+                headers={"Authorization": f"Bearer {bearer_token}"},
+            )
+        response.raise_for_status()
+        return response.json()
+
     def _build_timeout(self, seconds: float) -> httpx.Timeout:
         return httpx.Timeout(timeout=seconds, connect=min(seconds, 5.0))
+
+    def _count_rejected_exits(self, audit_items: list[dict]) -> int:
+        count = 0
+        for item in audit_items:
+            if item.get("path") != "/parking/exit":
+                continue
+            if int(item.get("status_code") or 0) >= 400:
+                count += 1
+        return count
 
     def _build_internal_token(self, permissions: list[str]) -> str:
         return encode_access_token(

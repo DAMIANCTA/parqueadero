@@ -108,6 +108,15 @@ class PaymentRepository:
                 session["receipt_number"] = None
                 session["notes"] = None
                 session["exit_time"] = None
+            elif payment_status == "NOT_REQUIRED":
+                session["amount"] = 0.0
+                session["paid_amount"] = None
+                session["payment_method"] = None
+                session["paid_at"] = None
+                session["payment_valid_until"] = None
+                session["receipt_number"] = None
+                session["notes"] = "Monthly permit / member access"
+                session["exit_time"] = None
             return session.copy()
 
         session = {
@@ -128,6 +137,9 @@ class PaymentRepository:
             "notes": None,
             "currency": "USD",
         }
+        if payment_status == "NOT_REQUIRED":
+            session["amount"] = 0.0
+            session["notes"] = "Monthly permit / member access"
         self.sessions[session_id] = session
         return session.copy()
 

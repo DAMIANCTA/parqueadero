@@ -2,6 +2,8 @@ from fastapi import APIRouter, Request
 
 from config import settings
 from schemas.payment import (
+    AdminDashboardSummaryResponse,
+    AdminSessionListResponse,
     CashierPaymentLookupResponse,
     CashierPaymentRegistrationRequest,
     CashierPaymentRegistrationResponse,
@@ -36,6 +38,21 @@ def get_session_by_qr(qr_code: str) -> PaymentSessionResponse:
 @router.get("/by-plate/{plate_text}", response_model=CashierPaymentLookupResponse, dependencies=[require_permissions("payments.read")])
 def get_active_payment_by_plate(plate_text: str) -> CashierPaymentLookupResponse:
     return payment_service.get_active_payment_by_plate(plate_text)
+
+
+@router.get("/admin/dashboard-summary", response_model=AdminDashboardSummaryResponse, dependencies=[require_permissions("payments.read")])
+def get_admin_dashboard_summary() -> AdminDashboardSummaryResponse:
+    return payment_service.get_admin_dashboard_summary()
+
+
+@router.get("/admin/active-sessions", response_model=AdminSessionListResponse, dependencies=[require_permissions("payments.read")])
+def get_admin_active_sessions() -> AdminSessionListResponse:
+    return payment_service.get_admin_active_sessions()
+
+
+@router.get("/admin/session-history", response_model=AdminSessionListResponse, dependencies=[require_permissions("payments.read")])
+def get_admin_session_history() -> AdminSessionListResponse:
+    return payment_service.get_admin_session_history()
 
 
 @router.post("/pay", response_model=PaymentResponse, dependencies=[require_permissions("payments.pay")])

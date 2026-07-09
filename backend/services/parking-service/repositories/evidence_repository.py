@@ -103,6 +103,17 @@ class EvidenceRepository:
         return self._normalize_row(row)
 
     def link_to_session(self, image_id: str, session_id: str, plate: str) -> dict | None:
+        try:
+            image_uuid = UUID(image_id)
+            session_uuid = UUID(session_id)
+        except ValueError:
+            logger.info(
+                "evidence_repository skip_link_non_uuid image_id=%s session_id=%s plate=%s",
+                image_id,
+                session_id,
+                plate,
+            )
+            return None
         with self._connect() as connection:
             with connection.cursor(row_factory=dict_row) as cursor:
                 cursor.execute(
@@ -125,8 +136,8 @@ class EvidenceRepository:
                         status
                     """,
                     {
-                        "image_id": UUID(image_id),
-                        "session_id": UUID(session_id),
+                        "image_id": image_uuid,
+                        "session_id": session_uuid,
                         "plate": plate,
                     },
                 )
@@ -135,6 +146,10 @@ class EvidenceRepository:
         return None if row is None else self._normalize_row(row)
 
     def get(self, image_id: str) -> dict | None:
+        try:
+            image_uuid = UUID(image_id)
+        except ValueError:
+            return None
         with self._connect() as connection:
             with connection.cursor(row_factory=dict_row) as cursor:
                 cursor.execute(
@@ -154,7 +169,7 @@ class EvidenceRepository:
                     FROM image_evidence
                     WHERE id = %(image_id)s
                     """,
-                    {"image_id": UUID(image_id)},
+                    {"image_id": image_uuid},
                 )
                 row = cursor.fetchone()
         return None if row is None else self._normalize_row(row)

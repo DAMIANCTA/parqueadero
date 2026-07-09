@@ -1,4 +1,5 @@
 from typing import Literal
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -238,3 +239,251 @@ class FaceServiceConfigResponse(BaseModel):
     model_loaded: bool
     model_error: str | None = None
     active_provider: str
+
+
+class MemberCreateRequest(BaseModel):
+    university_id: str
+    document_id: str
+    institutional_id: str
+    full_name: str
+    email: str
+    role_type: Literal["STUDENT", "TEACHER", "STAFF"]
+    status: Literal["ACTIVE", "INACTIVE"] = "ACTIVE"
+
+
+class MemberResponse(BaseModel):
+    id: str
+    university_id: str
+    document_id: str
+    institutional_id: str
+    full_name: str
+    email: str
+    role_type: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class MemberListResponse(BaseModel):
+    total: int
+    items: list[MemberResponse]
+
+
+class VehicleCreateRequest(BaseModel):
+    university_id: str
+    plate_text: str
+    brand: str
+    model: str
+    color: str
+    status: Literal["ACTIVE", "INACTIVE"] = "ACTIVE"
+
+
+class VehicleResponse(BaseModel):
+    id: str
+    university_id: str
+    plate_text: str
+    brand: str
+    model: str
+    color: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class VehicleListResponse(BaseModel):
+    total: int
+    items: list[VehicleResponse]
+
+
+class VehicleAuthorizationRequest(BaseModel):
+    person_id: str
+    is_owner: bool = False
+    status: Literal["ACTIVE", "INACTIVE"] = "ACTIVE"
+
+
+class VehicleAuthorizationResponse(BaseModel):
+    id: str
+    university_id: str
+    person_id: str
+    vehicle_id: str
+    is_owner: bool
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class VehicleLookupResponse(BaseModel):
+    found: bool
+    message: str
+    vehicle: VehicleResponse | None = None
+    authorized_people: list[MemberResponse] = Field(default_factory=list)
+
+
+class FaceEnrollMemberRequest(BaseModel):
+    face_image_id: str
+    quality_score_hint: float | None = Field(default=None, ge=0, le=1)
+    provider_hint: str | None = None
+
+
+class FaceProfileResponse(BaseModel):
+    id: str
+    university_id: str
+    person_id: str
+    face_image_id: str
+    template_id: str
+    embedding_id: str
+    provider: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class FaceProfileListResponse(BaseModel):
+    total: int
+    items: list[FaceProfileResponse]
+
+
+class MonthlyPermitCreateRequest(BaseModel):
+    university_id: str
+    person_id: str
+    vehicle_id: str
+    start_date: date
+    end_date: date
+    amount: float
+    payment_method: str
+    status: Literal["VALID", "EXPIRED", "SUSPENDED"] = "VALID"
+    paid_at: datetime | None = None
+    receipt_number: str | None = None
+
+
+class MonthlyPermitResponse(BaseModel):
+    id: str
+    university_id: str
+    person_id: str
+    vehicle_id: str
+    start_date: date
+    end_date: date
+    amount: float
+    payment_method: str
+    status: str
+    paid_at: datetime | None = None
+    receipt_number: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MonthlyPermitListResponse(BaseModel):
+    total: int
+    items: list[MonthlyPermitResponse]
+
+
+class PermitLookupResponse(BaseModel):
+    found: bool
+    plate_text: str | None = None
+    permit_status: str | None = None
+    person_id: str | None = None
+    person_name: str | None = None
+    role_type: str | None = None
+    vehicle_id: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    message: str
+
+
+class MemberAccessValidationRequest(BaseModel):
+    university_id: str
+    plate_text: str
+    face_image_id: str
+    gate_id: str
+    session_person_id: str | None = None
+
+
+class MemberAccessValidationResponse(BaseModel):
+    authorized: bool
+    access_type: str = "MEMBER"
+    vehicle_registered: bool = False
+    person_id: str | None = None
+    person_name: str | None = None
+    role_type: str | None = None
+    vehicle_id: str | None = None
+    plate_text: str
+    permit_status: str | None = None
+    face_match: bool = False
+    similarity: float = Field(default=0, ge=0, le=1)
+    template_id: str | None = None
+    provider: str | None = None
+    message: str
+    warnings: list[str] = Field(default_factory=list)
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=100)
+    password: str = Field(min_length=6, max_length=100)
+
+
+class GatewayTokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    expires_in: int
+    roles: list[str]
+    permissions: list[str]
+    university_id: str | None = None
+
+
+class CurrentUserResponse(BaseModel):
+    sub: str
+    username: str
+    roles: list[str]
+    permissions: list[str]
+    university_id: str | None = None
+
+
+class AdminDashboardSummaryResponse(BaseModel):
+    active_sessions: int
+    vehicles_inside: int
+    pending_payments: int
+    paid_today: int
+    revenue_today: float
+    authorized_exits_today: int
+    rejected_exits_today: int
+
+
+class AdminSessionItemResponse(BaseModel):
+    session_id: str
+    plate_text: str
+    entry_time: str
+    exit_time: str | None = None
+    duration_minutes: int
+    amount: float
+    currency: str
+    payment_status: str
+    session_status: str
+    payment_method: str | None = None
+    paid_at: str | None = None
+    paid_amount: float | None = None
+    payment_valid_until: str | None = None
+    receipt_number: str | None = None
+
+
+class AdminSessionListResponse(BaseModel):
+    total: int
+    items: list[AdminSessionItemResponse]
+
+
+class AdminAuditEventItemResponse(BaseModel):
+    id: str | None = None
+    timestamp: int | None = None
+    service: str | None = None
+    method: str | None = None
+    path: str | None = None
+    status_code: int | None = None
+    duration_ms: float | None = None
+    client_ip: str | None = None
+    actor_user_id: str | None = None
+    actor_username: str | None = None
+    actor_roles: list[str] = Field(default_factory=list)
+
+
+class AdminAuditEventListResponse(BaseModel):
+    total: int
+    items: list[AdminAuditEventItemResponse]

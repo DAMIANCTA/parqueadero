@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 
 PersonType = Literal["visitor", "student", "teacher", "employee"]
+AccessType = Literal["VISITOR", "MEMBER"]
 
 
 class ParkingEntryRequest(BaseModel):
@@ -51,6 +52,13 @@ class SessionData(BaseModel):
     payment_status: str
     person_type: PersonType
     plate_text: str
+    access_type: AccessType
+    person_id: str | None = None
+    person_name: str | None = None
+    role_type: str | None = None
+    vehicle_id: str | None = None
+    entry_time: str | None = None
+    exit_time: str | None = None
 
 
 class GateCommand(BaseModel):

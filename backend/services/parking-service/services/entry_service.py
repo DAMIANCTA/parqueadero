@@ -49,19 +49,6 @@ class EntryService:
                 reason="Liveness score too low",
             )
 
-        if payload.person_type != "visitor":
-            authorization = self.vehicle_authorization_repository.validate_plate_authorization(
-                university_id=payload.university_id,
-                plate_text=normalized_plate,
-                person_type=payload.person_type,
-            )
-            if not authorization["authorized"]:
-                return self._reject(
-                    payload=payload,
-                    normalized_plate=normalized_plate,
-                    reason="Plate is not authorized for this person type",
-                )
-
         session_id = str(uuid.uuid4())
         face_validation = self.face_service.validate_entry_face(
             university_id=payload.university_id,
@@ -88,13 +75,56 @@ class EntryService:
                 face_validation=face_validation,
             )
 
+        registered_vehicle = self.vehicle_authorization_repository.detect_registered_vehicle(
+            university_id=payload.university_id,
+            plate_text=normalized_plate,
+        )
+        access_type = "VISITOR"
+        person_type = "visitor"
+        member_validation: dict | None = None
+        session_person_id = None
+        session_person_name = None
+        session_role_type = None
+        session_vehicle_id = None
+        payment_status = "PENDING"
+
+        if registered_vehicle["found"]:
+            member_validation = self.vehicle_authorization_repository.validate_member_entry(
+                university_id=payload.university_id,
+                plate_text=normalized_plate,
+                face_image_id=face_image_id,
+                gate_id=payload.gate_id,
+            )
+            if not member_validation.get("authorized"):
+                return self._reject(
+                    payload=payload,
+                    normalized_plate=normalized_plate,
+                    reason=member_validation.get("message", "Member access validation failed"),
+                    face_validation=face_validation,
+                )
+            access_type = "MEMBER"
+            person_type = str(member_validation.get("role_type", "STAFF")).lower()
+            if person_type == "staff":
+                person_type = "employee"
+            session_person_id = member_validation.get("person_id")
+            session_person_name = member_validation.get("person_name")
+            session_role_type = member_validation.get("role_type")
+            session_vehicle_id = member_validation.get("vehicle_id")
+            payment_status = "NOT_REQUIRED"
+
         session_record = self.parking_session_repository.create_entry_session(
             university_id=payload.university_id,
             campus_id=payload.campus_id,
             gate_id=payload.gate_id,
             plate_text=normalized_plate,
-            person_type=payload.person_type,
+            person_type=person_type,
             entry_face_image_id=face_mock_id,
+            access_type=access_type,
+            payment_status=payment_status,
+            person_id=session_person_id,
+            person_name=session_person_name,
+            role_type=session_role_type,
+            vehicle_id=session_vehicle_id,
             entry_face_evidence_id=face_image_id,
             entry_plate_evidence_id=plate_image_id,
             session_id=session_id,
@@ -107,8 +137,13 @@ class EntryService:
         )
         self.evidence_service.link_evidence_to_session(face_image_id, session_record["session_id"], normalized_plate)
         self.evidence_service.link_evidence_to_session(plate_image_id, session_record["session_id"], normalized_plate)
-        if payload.person_type == "visitor":
+        if access_type == "VISITOR":
             self.payment_repository.sync_visitor_session(
+                session_id=session_record["session_id"],
+                plate_text=normalized_plate,
+            )
+        else:
+            self.payment_repository.sync_member_session(
                 session_id=session_record["session_id"],
                 plate_text=normalized_plate,
             )
@@ -135,11 +170,17 @@ class EntryService:
             metadata={
                 "gate_id": payload.gate_id,
                 "plate_text": normalized_plate,
-                "person_type": payload.person_type,
+                "person_type": person_type,
+                "access_type": access_type,
+                "person_id": session_person_id,
+                "person_name": session_person_name,
+                "role_type": session_role_type,
                 "operator_username": payload.operator_username,
                 "plate_detected_text": payload.plate_detected_text,
                 "plate_detection_confidence": payload.plate_detection_confidence,
                 "plate_override_reason": payload.plate_override_reason,
+                "member_similarity": member_validation.get("similarity") if member_validation else None,
+                "member_permit_status": member_validation.get("permit_status") if member_validation else None,
             },
         )
 
@@ -177,6 +218,7 @@ class EntryService:
                 "gate_id": payload.gate_id,
                 "plate_text": normalized_plate,
                 "person_type": payload.person_type,
+                "access_type": "VISITOR" if payload.person_type == "visitor" else "MEMBER_CANDIDATE",
                 "reason": reason,
                 "operator_username": payload.operator_username,
                 "plate_detected_text": payload.plate_detected_text,

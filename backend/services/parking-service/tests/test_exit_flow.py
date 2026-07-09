@@ -4,16 +4,33 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from config import settings
 from main import app
+from security import encode_access_token
 
 
 class ParkingExitFlowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(app)
+        token = encode_access_token(
+            secret_key=settings.jwt_secret_key,
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+            expires_minutes=30,
+            claims={
+                "sub": "test-gate",
+                "username": "gate.operator",
+                "roles": ["gate_operator"],
+                "permissions": ["parking.entry", "parking.exit", "faces.verify", "faces.compare"],
+                "university_id": "11111111-1111-1111-1111-111111111111",
+            },
+        )
+        self.headers = {"Authorization": f"Bearer {token}"}
 
     def test_visitor_exit_requires_paid_session_and_matching_face(self) -> None:
         response = self.client.post(
             "/parking/exit",
+            headers=self.headers,
             json={
                 "university_id": "11111111-1111-1111-1111-111111111111",
                 "campus_id": "22222222-2222-2222-2222-222222222222",
@@ -36,6 +53,7 @@ class ParkingExitFlowTests(unittest.TestCase):
     def test_visitor_exit_rejects_when_payment_pending(self) -> None:
         response = self.client.post(
             "/parking/exit",
+            headers=self.headers,
             json={
                 "university_id": "11111111-1111-1111-1111-111111111111",
                 "campus_id": "22222222-2222-2222-2222-222222222222",
@@ -58,6 +76,7 @@ class ParkingExitFlowTests(unittest.TestCase):
     def test_registered_exit_authorizes_when_plate_face_and_permission_are_valid(self) -> None:
         response = self.client.post(
             "/parking/exit",
+            headers=self.headers,
             json={
                 "university_id": "11111111-1111-1111-1111-111111111111",
                 "campus_id": "22222222-2222-2222-2222-222222222222",
@@ -74,11 +93,13 @@ class ParkingExitFlowTests(unittest.TestCase):
         payload = response.json()
         self.assertTrue(payload["authorized"])
         self.assertEqual(payload["session"]["payment_status"], "NOT_REQUIRED")
+        self.assertEqual(payload["session"]["access_type"], "MEMBER")
         self.assertTrue(payload["gate_command"]["published"])
 
     def test_registered_exit_rejects_when_permission_is_invalid(self) -> None:
         response = self.client.post(
             "/parking/exit",
+            headers=self.headers,
             json={
                 "university_id": "11111111-1111-1111-1111-111111111111",
                 "campus_id": "22222222-2222-2222-2222-222222222222",
@@ -109,6 +130,7 @@ class ParkingExitFlowTests(unittest.TestCase):
         ):
             response = self.client.post(
                 "/parking/exit",
+                headers=self.headers,
                 json={
                     "university_id": "11111111-1111-1111-1111-111111111111",
                     "campus_id": "22222222-2222-2222-2222-222222222222",

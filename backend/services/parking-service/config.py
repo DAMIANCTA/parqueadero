@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     face_service_timeout_seconds: float = 10.0
     iot_service_url: str = "http://iot-service:8000"
     iot_service_timeout_seconds: float = 1.5
+    vehicle_service_url: str = "http://vehicle-service:8000"
+    vehicle_service_timeout_seconds: float = 4.0
     payment_service_url: str = "http://payment-service:8000"
     payment_service_timeout_seconds: float = 1.5
     postgres_biometrics_host: str = "postgres-biometrics"

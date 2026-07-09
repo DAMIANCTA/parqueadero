@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     environment: str = "local"
     cors_allow_origins_csv: str = "*"
     parking_service_url: str = "http://parking-service:8000"
+    auth_service_url: str = "http://auth-service:8000"
+    vehicle_service_url: str = "http://vehicle-service:8000"
     face_service_url: str = "http://face-service:8000"
     plate_service_url: str = "http://plate-service:8000"
     payment_service_url: str = "http://payment-service:8000"

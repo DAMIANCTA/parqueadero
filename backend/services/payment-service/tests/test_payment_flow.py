@@ -149,6 +149,25 @@ class PaymentFlowTests(unittest.TestCase):
         self.assertFalse(payload["found"])
         self.assertEqual(payload["message"], "No active session found for this plate")
 
+    def test_admin_dashboard_summary_returns_operational_totals(self) -> None:
+        response = self.client.get("/payments/admin/dashboard-summary", headers=self.headers)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertGreaterEqual(payload["active_sessions"], 1)
+        self.assertIn("revenue_today", payload)
+
+    def test_admin_session_lists_split_inside_and_outside(self) -> None:
+        active_response = self.client.get("/payments/admin/active-sessions", headers=self.headers)
+        history_response = self.client.get("/payments/admin/session-history", headers=self.headers)
+
+        self.assertEqual(active_response.status_code, 200)
+        self.assertEqual(history_response.status_code, 200)
+        active_payload = active_response.json()
+        history_payload = history_response.json()
+        self.assertTrue(any(item["session_status"] == "INSIDE" for item in active_payload["items"]))
+        self.assertTrue(any(item["session_status"] == "OUTSIDE" for item in history_payload["items"]))
+
 
 if __name__ == "__main__":
     unittest.main()

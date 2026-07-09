@@ -1,9 +1,14 @@
+from datetime import UTC, datetime
+
 from fastapi import HTTPException
 
 from repositories.audit_log_repository import AuditLogRepository
 from repositories.payment_repository import PaymentRepository
 from config import settings
 from schemas.payment import (
+    AdminDashboardSummaryResponse,
+    AdminSessionItem,
+    AdminSessionListResponse,
     CashierPaymentLookupResponse,
     CashierPaymentRegistrationRequest,
     CashierPaymentRegistrationResponse,
@@ -42,6 +47,51 @@ class PaymentFlowService:
                 message="No active session found for this plate",
             )
         return self._to_cashier_lookup(session)
+
+    def get_admin_dashboard_summary(self) -> AdminDashboardSummaryResponse:
+        sessions = list(self.payment_repository.sessions.values())
+        today = datetime.now(UTC).date()
+        active_sessions = [session for session in sessions if session.get("session_status") == "INSIDE"]
+        paid_today_sessions = [
+            session
+            for session in sessions
+            if session.get("paid_at") is not None and session["paid_at"].astimezone(UTC).date() == today
+        ]
+        authorized_exits = [
+            session
+            for session in sessions
+            if session.get("session_status") == "OUTSIDE"
+            and session.get("exit_time") is not None
+            and session["exit_time"].astimezone(UTC).date() == today
+            and session.get("payment_status") == "PAID"
+        ]
+        return AdminDashboardSummaryResponse(
+            active_sessions=len(active_sessions),
+            vehicles_inside=len(active_sessions),
+            pending_payments=sum(1 for session in active_sessions if session.get("payment_status") == "PENDING"),
+            paid_today=len(paid_today_sessions),
+            revenue_today=round(sum(float(session.get("paid_amount") or 0.0) for session in paid_today_sessions), 2),
+            authorized_exits_today=len(authorized_exits),
+            rejected_exits_today=0,
+        )
+
+    def get_admin_active_sessions(self) -> AdminSessionListResponse:
+        sessions = [
+            self._to_admin_session_item(session)
+            for session in self.payment_repository.sessions.values()
+            if session.get("session_status") == "INSIDE"
+        ]
+        sessions.sort(key=lambda item: item.entry_time, reverse=True)
+        return AdminSessionListResponse(total=len(sessions), items=sessions)
+
+    def get_admin_session_history(self) -> AdminSessionListResponse:
+        sessions = [
+            self._to_admin_session_item(session)
+            for session in self.payment_repository.sessions.values()
+            if session.get("session_status") == "OUTSIDE"
+        ]
+        sessions.sort(key=lambda item: item.exit_time or item.entry_time, reverse=True)
+        return AdminSessionListResponse(total=len(sessions), items=sessions)
 
     def register_cash_payment(self, payload: CashierPaymentRegistrationRequest) -> CashierPaymentRegistrationResponse:
         session = self.payment_repository.find_by_session_id(payload.session_id)
@@ -383,7 +433,27 @@ class PaymentFlowService:
             receipt_number=session.get("receipt_number"),
         )
 
+    def _to_admin_session_item(self, session: dict) -> AdminSessionItem:
+        return AdminSessionItem(
+            session_id=session["session_id"],
+            plate_text=session["plate_text"],
+            entry_time=session["entry_time"],
+            exit_time=session.get("exit_time"),
+            duration_minutes=self._effective_duration_minutes(session),
+            amount=round(self._effective_amount(session), 2),
+            currency=session["currency"],
+            payment_status=session["payment_status"],
+            session_status=session.get("session_status", "INSIDE"),
+            payment_method=session.get("payment_method"),
+            paid_at=session.get("paid_at"),
+            paid_amount=session.get("paid_amount"),
+            payment_valid_until=session.get("payment_valid_until"),
+            receipt_number=session.get("receipt_number"),
+        )
+
     def _effective_amount(self, session: dict) -> float:
+        if session.get("payment_status") == "NOT_REQUIRED":
+            return 0.0
         if session.get("payment_status") == "PAID" and session.get("paid_amount") is not None:
             return float(session["paid_amount"])
         return self.tariff_service.calculate_amount(session["entry_time"])
