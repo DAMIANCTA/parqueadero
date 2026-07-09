@@ -5,12 +5,16 @@ class Settings(BaseSettings):
     service_name: str = "iot-service"
     service_version: str = "0.1.0"
     environment: str = "local"
+    iot_enabled: bool = True
     mqtt_host: str = "mosquitto"
     mqtt_port: int = 1883
     mqtt_qos: int = 0
     mqtt_keepalive: int = 60
     mqtt_username: str | None = None
     mqtt_password: str | None = None
+    iot_gate_default_id: str = "garita-01"
+    iot_gate_command_topic: str = "ucepark/garita/comandos"
+    iot_gate_event_topic: str = "ucepark/garita/eventos"
     jwt_secret_key: str = ""
     jwt_issuer: str = "smart-parking-university"
     jwt_audience: str = "smart-parking-clients"

@@ -118,6 +118,11 @@ class ApiClient {
       paymentMethod: body['payment_method'] as String?,
       paymentValidUntil: DateTime.tryParse(body['payment_valid_until'] as String? ?? ''),
       receiptNumber: body['receipt_number'] as String?,
+      accessType: body['access_type'] as String?,
+      personId: body['person_id'] as String?,
+      personName: body['person_name'] as String?,
+      roleType: body['role_type'] as String?,
+      permitStatus: body['permit_status'] as String?,
     );
   }
 
@@ -340,6 +345,14 @@ class ApiClient {
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final sessionData = body['session'] as Map<String, dynamic>?;
     final gateCommand = body['gate_command'] as Map<String, dynamic>?;
+    final faceValidationData = body['face_validation'] is Map<String, dynamic>
+        ? body['face_validation'] as Map<String, dynamic>
+        : null;
+    final parsedSimilarity = (faceValidationData?['similarity'] as num?)?.toDouble();
+    final parsedDistance = (faceValidationData?['distance'] as num?)?.toDouble();
+    final parsedThreshold = (faceValidationData?['threshold'] as num?)?.toDouble();
+    final parsedFaceMatch =
+        faceValidationData?['match'] as bool? ?? faceValidationData?['face_match'] as bool?;
 
     return AuthorizationResult(
       authorized: body['authorized'] as bool? ?? false,
@@ -359,26 +372,38 @@ class ApiClient {
               paymentStatus: sessionData['payment_status'] as String,
               plateText: sessionData['plate_text'] as String,
               personType: sessionData['person_type'] as String?,
+              accessType: sessionData['access_type'] as String? ?? body['access_type'] as String?,
+              personId: sessionData['person_id'] as String? ?? body['person_id'] as String?,
+              personName: sessionData['person_name'] as String? ?? body['person_name'] as String?,
+              roleType: sessionData['role_type'] as String? ?? body['role_type'] as String?,
+              permitStatus: sessionData['permit_status'] as String? ??
+                  body['permit_status'] as String? ??
+                  body['member_permit_status'] as String?,
             ),
-      faceValidation: body['face_validation'] is Map<String, dynamic>
+      faceValidation: faceValidationData != null
           ? FaceValidationUiResult(
-              detected: body['face_validation']['detected'] as bool? ?? false,
-              match: body['face_validation']['match'] as bool?,
-              similarity: (body['face_validation']['similarity'] as num?)?.toDouble(),
-              threshold: (body['face_validation']['threshold'] as num?)?.toDouble(),
-              imageId: body['face_validation']['image_id'] as String?,
-              templateId: body['face_validation']['template_id'] as String?,
-              provider: body['face_validation']['provider'] as String? ?? 'unknown',
-              mode: body['face_validation']['mode'] as String? ?? 'unknown',
-              modelName: body['face_validation']['model_name'] as String?,
-              qualityScore: (body['face_validation']['quality_score'] as num?)?.toDouble(),
-              embeddingSize: body['face_validation']['embedding_size'] as int? ?? 0,
-              boundingBox: body['face_validation']['bounding_box'] is Map
-                  ? Map<String, dynamic>.from(body['face_validation']['bounding_box'] as Map)
+              detected: faceValidationData['detected'] as bool? ?? false,
+              match: parsedFaceMatch,
+              similarity: parsedSimilarity,
+              distance: parsedDistance,
+              threshold: parsedThreshold,
+              imageId: faceValidationData['image_id'] as String?,
+              templateId: faceValidationData['template_id'] as String?,
+              provider: faceValidationData['provider'] as String? ?? 'unknown',
+              mode: faceValidationData['mode'] as String? ?? 'unknown',
+              modelName: faceValidationData['model_name'] as String?,
+              qualityScore: (faceValidationData['quality_score'] as num?)?.toDouble(),
+              embeddingSize: faceValidationData['embedding_size'] as int? ?? 0,
+              boundingBox: faceValidationData['bounding_box'] is Map
+                  ? Map<String, dynamic>.from(faceValidationData['bounding_box'] as Map)
                   : null,
-              warnings: (body['face_validation']['warnings'] as List? ?? const []).map((item) => item.toString()).toList(),
+              warnings: (faceValidationData['warnings'] as List? ?? const []).map((item) => item.toString()).toList(),
             )
           : null,
+      faceMatch: parsedFaceMatch,
+      similarity: parsedSimilarity,
+      distance: parsedDistance,
+      threshold: parsedThreshold,
     );
   }
 }

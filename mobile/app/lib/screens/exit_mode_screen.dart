@@ -54,6 +54,8 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
 
   bool get _isSecurityOperator => ParkingAppScope.of(context).isSecurityOperator;
   bool get _useRealFaceFlow => _faceConfig?.usesRealOrHybrid ?? false;
+  bool get _hasMemberSession => _paymentLookup?.isMemberSession ?? false;
+  bool get _showPaymentVerificationButton => !_hasMemberSession;
 
   bool get _usingManualOverride {
     if (!_isSecurityOperator) {
@@ -205,11 +207,17 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
   }
 
   Future<void> _verifyPayment() async {
+    await _refreshPaymentLookup(showFeedback: true);
+  }
+
+  Future<void> _refreshPaymentLookup({required bool showFeedback}) async {
     final plate = _effectivePlateText;
     if (plate.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Primero detecta la placa para verificar el pago.')),
-      );
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Primero detecta la placa para verificar el pago.')),
+        );
+      }
       return;
     }
 
@@ -217,22 +225,28 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
       final result = await _apiClient.checkPaymentByPlate(plate);
       if (!mounted) return;
       setState(() => _paymentLookup = result);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            !result.found
-                ? result.message
-                : result.isPaid
-                ? 'Pago verificado: la sesion ya esta en PAID.'
-                : 'Pago aun pendiente en Secretaria/Caja.',
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              !result.found
+                  ? result.message
+                  : result.isMemberSession
+                  ? 'Sesion de miembro detectada: no requiere pago.'
+                  : result.isPaid
+                  ? 'Pago verificado: la sesion ya esta en PAID.'
+                  : 'Pago aun pendiente en Secretaria/Caja.',
+            ),
           ),
-        ),
-      );
+        );
+      }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
-      );
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
     }
   }
 
@@ -406,6 +420,9 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
         _plateDetection = detection;
         _plateController.text = detection.plateText ?? '';
       });
+      if (detection.plateText != null && detection.plateText!.isNotEmpty) {
+        await _refreshPaymentLookup(showFeedback: false);
+      }
       if (batchDetection.inconsistent) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Resultado inconsistente entre capturas.')),
@@ -707,11 +724,40 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
         children: [
           _buildPlateDetectionCard(),
           const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _canSubmitWithPlate ? _verifyPayment : null,
-            icon: const Icon(Icons.payments),
-            label: const Text('Verificar pago'),
-          ),
+          if (_showPaymentVerificationButton)
+            OutlinedButton.icon(
+              onPressed: _canSubmitWithPlate ? _verifyPayment : null,
+              icon: const Icon(Icons.payments),
+              label: const Text('Verificar pago'),
+            ),
+          if (_hasMemberSession) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.teal.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.teal.withOpacity(0.35)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Sesion MEMBER detectada'),
+                  const SizedBox(height: 4),
+                  Text('Placa: ${_paymentLookup!.plateText}'),
+                  Text('Pago: ${_paymentLookup!.paymentStatus}'),
+                  if ((_paymentLookup!.personName ?? '').isNotEmpty)
+                    Text('Nombre: ${_paymentLookup!.personName}'),
+                  if ((_paymentLookup!.roleType ?? '').isNotEmpty)
+                    Text('Rol: ${_paymentLookup!.roleLabel}'),
+                  Text(
+                    (_paymentLookup!.permitStatus ?? '').isNotEmpty
+                        ? 'Permiso: ${_paymentLookup!.permitStatus}'
+                        : 'Permiso: se validara en backend con placa + rostro.',
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           _buildFaceEvidenceCard(),
           const SizedBox(height: 12),
@@ -760,9 +806,19 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _paymentLookup!.isPaid ? Colors.green.withOpacity(0.10) : Colors.orange.withOpacity(0.10),
+                color: _paymentLookup!.isMemberSession
+                    ? Colors.teal.withOpacity(0.08)
+                    : _paymentLookup!.isPaid
+                    ? Colors.green.withOpacity(0.10)
+                    : Colors.orange.withOpacity(0.10),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _paymentLookup!.isPaid ? Colors.green : Colors.orange),
+                border: Border.all(
+                  color: _paymentLookup!.isMemberSession
+                      ? Colors.teal
+                      : _paymentLookup!.isPaid
+                      ? Colors.green
+                      : Colors.orange,
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -772,15 +828,25 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
                     Text('Estado de pago: ${_paymentLookup!.paymentStatus}'),
                     Text('Placa: ${_paymentLookup!.plateText}'),
                     Text('Entrada: ${_paymentLookup!.entryTime.toLocal()}'),
-                    Text('Tiempo estacionado: ${_paymentLookup!.durationMinutes} min'),
-                    Text(
-                      _paymentLookup!.isPaid
-                          ? 'Monto pagado: ${_paymentLookup!.currency} ${(_paymentLookup!.paidAmount ?? _paymentLookup!.amount).toStringAsFixed(2)}'
-                          : 'Monto calculado: ${_paymentLookup!.currency} ${_paymentLookup!.amount.toStringAsFixed(2)}',
-                    ),
-                    if (_paymentLookup!.paidAt != null) Text('Hora de pago: ${_paymentLookup!.paidAt!.toLocal()}'),
-                    if (_paymentLookup!.paymentValidUntil != null)
-                      Text('Valido hasta: ${_paymentLookup!.paymentValidUntil!.toLocal()}'),
+                    if (_paymentLookup!.isMemberSession) ...[
+                      const Text('Acceso: MEMBER'),
+                      Text(
+                        (_paymentLookup!.permitStatus ?? '').isNotEmpty
+                            ? 'Permiso: ${_paymentLookup!.permitStatus}'
+                            : 'Permiso: se validara en la autorizacion de salida.',
+                      ),
+                      const Text('Pago: NOT_REQUIRED'),
+                    ] else ...[
+                      Text('Tiempo estacionado: ${_paymentLookup!.durationMinutes} min'),
+                      Text(
+                        _paymentLookup!.isPaid
+                            ? 'Monto pagado: ${_paymentLookup!.currency} ${(_paymentLookup!.paidAmount ?? _paymentLookup!.amount).toStringAsFixed(2)}'
+                            : 'Monto calculado: ${_paymentLookup!.currency} ${_paymentLookup!.amount.toStringAsFixed(2)}',
+                      ),
+                      if (_paymentLookup!.paidAt != null) Text('Hora de pago: ${_paymentLookup!.paidAt!.toLocal()}'),
+                      if (_paymentLookup!.paymentValidUntil != null)
+                        Text('Valido hasta: ${_paymentLookup!.paymentValidUntil!.toLocal()}'),
+                    ],
                   ],
                 ],
               ),

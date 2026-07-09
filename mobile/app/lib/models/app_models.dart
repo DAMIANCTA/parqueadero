@@ -99,6 +99,11 @@ class ResultSessionSummary {
     required this.paymentStatus,
     required this.plateText,
     this.personType,
+    this.accessType,
+    this.personId,
+    this.personName,
+    this.roleType,
+    this.permitStatus,
   });
 
   final String sessionId;
@@ -106,6 +111,30 @@ class ResultSessionSummary {
   final String paymentStatus;
   final String plateText;
   final String? personType;
+  final String? accessType;
+  final String? personId;
+  final String? personName;
+  final String? roleType;
+  final String? permitStatus;
+
+  bool get isMember =>
+      (accessType ?? '').toUpperCase() == 'MEMBER' || paymentStatus.toUpperCase() == 'NOT_REQUIRED';
+
+  bool get isVisitor => !isMember;
+
+  String get roleLabel {
+    switch ((roleType ?? '').toUpperCase()) {
+      case 'STUDENT':
+        return 'Estudiante';
+      case 'TEACHER':
+        return 'Profesor';
+      case 'STAFF':
+      case 'EMPLOYEE':
+        return 'Personal';
+      default:
+        return roleType ?? '-';
+    }
+  }
 }
 
 class AuthorizationResult {
@@ -121,6 +150,10 @@ class AuthorizationResult {
     this.incidentId,
     this.session,
     this.faceValidation,
+    this.faceMatch,
+    this.similarity,
+    this.distance,
+    this.threshold,
   });
 
   final bool authorized;
@@ -134,6 +167,14 @@ class AuthorizationResult {
   final String? incidentId;
   final ResultSessionSummary? session;
   final FaceValidationUiResult? faceValidation;
+  final bool? faceMatch;
+  final double? similarity;
+  final double? distance;
+  final double? threshold;
+
+  bool get isMemberAccess => session?.isMember ?? false;
+
+  bool get isVisitorAccess => session?.isVisitor ?? false;
 }
 
 class DemoGateResult {
@@ -190,6 +231,11 @@ class PaymentLookupResult {
     required this.paymentMethod,
     required this.paymentValidUntil,
     required this.receiptNumber,
+    this.accessType,
+    this.personId,
+    this.personName,
+    this.roleType,
+    this.permitStatus,
   });
 
   final bool found;
@@ -208,8 +254,32 @@ class PaymentLookupResult {
   final String? paymentMethod;
   final DateTime? paymentValidUntil;
   final String? receiptNumber;
+  final String? accessType;
+  final String? personId;
+  final String? personName;
+  final String? roleType;
+  final String? permitStatus;
 
   bool get isPaid => found && paymentStatus == 'PAID';
+
+  bool get isMemberSession =>
+      found && ((accessType ?? '').toUpperCase() == 'MEMBER' || paymentStatus == 'NOT_REQUIRED');
+
+  bool get requiresPayment => found && !isMemberSession;
+
+  String get roleLabel {
+    switch ((roleType ?? '').toUpperCase()) {
+      case 'STUDENT':
+        return 'Estudiante';
+      case 'TEACHER':
+        return 'Profesor';
+      case 'STAFF':
+      case 'EMPLOYEE':
+        return 'Personal';
+      default:
+        return roleType ?? '-';
+    }
+  }
 }
 
 class LocalEvidenceDraft {
@@ -402,6 +472,7 @@ class FaceValidationUiResult {
     required this.warnings,
     this.match,
     this.similarity,
+    this.distance,
     this.threshold,
     this.imageId,
     this.templateId,
@@ -413,6 +484,7 @@ class FaceValidationUiResult {
   final bool detected;
   final bool? match;
   final double? similarity;
+  final double? distance;
   final double? threshold;
   final String? imageId;
   final String? templateId;
@@ -437,19 +509,19 @@ class FaceValidationUiResult {
     return match! ? 'MATCH' : 'NO_MATCH';
   }
 
-  String get similarityLabel =>
-      similarity == null ? 'N/A' : '${(similarity! * 100).toStringAsFixed(1)}%';
+  double? get effectiveScore => usesDistanceMetric ? (distance ?? similarity) : (similarity ?? distance);
 
   String get scoreLabel => usesDistanceMetric ? 'Distance' : 'Similarity';
 
   String get scoreValueLabel {
-    if (similarity == null) {
+    final score = effectiveScore;
+    if (score == null) {
       return 'N/A';
     }
     if (usesDistanceMetric) {
-      return similarity!.toStringAsFixed(4);
+      return score.toStringAsFixed(4);
     }
-    return '${(similarity! * 100).toStringAsFixed(1)}%';
+    return '${(score * 100).toStringAsFixed(1)}%';
   }
 
   String get thresholdValueLabel {
