@@ -40,11 +40,11 @@ class PaymentFlowService:
         return self._session_response(session, "qr")
 
     def get_active_payment_by_plate(self, plate_text: str) -> CashierPaymentLookupResponse:
-        session = self.payment_repository.find_by_plate(plate_text)
+        session = self.payment_repository.find_active_visitor_session_by_plate(plate_text)
         if session is None:
             return CashierPaymentLookupResponse(
                 found=False,
-                message="No active session found for this plate",
+                message="No hay una sesion activa para esta placa",
             )
         return self._to_cashier_lookup(session)
 
@@ -95,8 +95,8 @@ class PaymentFlowService:
 
     def register_cash_payment(self, payload: CashierPaymentRegistrationRequest) -> CashierPaymentRegistrationResponse:
         session = self.payment_repository.find_by_session_id(payload.session_id)
-        normalized_plate = payload.plate_text.strip().upper()
-        if session is None or session["plate_text"] != normalized_plate:
+        normalized_plate = payload.plate_text.strip().upper() if payload.plate_text else None
+        if session is None:
             audit_log = self.audit_log_repository.create_payment_audit_log(
                 action="payment.cashier.rejected",
                 resource_id=payload.session_id,
@@ -106,7 +106,22 @@ class PaymentFlowService:
                     "cashier_user_id": payload.cashier_user_id,
                 },
             )
-            raise HTTPException(status_code=404, detail=f"Active session not found for plate {normalized_plate}")
+            raise HTTPException(status_code=404, detail="No hay una sesion activa para esta placa")
+
+        if normalized_plate and session["plate_text"] != normalized_plate:
+            self.audit_log_repository.create_payment_audit_log(
+                action="payment.cashier.rejected",
+                resource_id=payload.session_id,
+                metadata={
+                    "reason": "plate_mismatch",
+                    "plate_text": normalized_plate,
+                    "session_plate_text": session["plate_text"],
+                    "cashier_user_id": payload.cashier_user_id,
+                },
+            )
+            raise HTTPException(status_code=409, detail="La sesion activa no corresponde a la placa enviada")
+
+        normalized_plate = session["plate_text"]
 
         if session.get("session_status") != "INSIDE":
             self.audit_log_repository.create_payment_audit_log(
@@ -119,7 +134,21 @@ class PaymentFlowService:
                     "session_status_before": session.get("session_status"),
                 },
             )
-            raise HTTPException(status_code=409, detail="Cannot register payment for a closed session")
+            raise HTTPException(status_code=409, detail="La sesion ya fue cerrada")
+
+        if session.get("access_type", "VISITOR") != "VISITOR":
+            self.audit_log_repository.create_payment_audit_log(
+                action="payment.cashier.rejected",
+                resource_id=payload.session_id,
+                metadata={
+                    "reason": "member_not_required",
+                    "plate_text": normalized_plate,
+                    "cashier_user_id": payload.cashier_user_id,
+                    "access_type": session.get("access_type"),
+                    "payment_status_before": session["payment_status"],
+                },
+            )
+            raise HTTPException(status_code=409, detail="Pago no requerido para miembro universitario")
 
         if session["payment_status"] != "PENDING":
             self.audit_log_repository.create_payment_audit_log(
@@ -132,6 +161,8 @@ class PaymentFlowService:
                     "payment_status_before": session["payment_status"],
                 },
             )
+            if session["payment_status"] == "PAID":
+                raise HTTPException(status_code=409, detail="Pago ya registrado para esta entrada")
             raise HTTPException(status_code=409, detail="Payment can only be registered when payment_status is PENDING")
 
         amount_due = self.tariff_service.calculate_amount(session["entry_time"])
@@ -321,11 +352,11 @@ class PaymentFlowService:
         )
 
     def get_status_by_plate(self, plate_text: str) -> PaymentStatusByPlateResponse:
-        session = self.payment_repository.find_by_plate(plate_text)
+        session = self.payment_repository.find_active_visitor_session_by_plate(plate_text)
         if session is None:
             return PaymentStatusByPlateResponse(
                 found=False,
-                message="No active session found for this plate",
+                message="No hay una sesion activa para esta placa",
             )
 
         amount_due = self._effective_amount(session)
@@ -334,6 +365,7 @@ class PaymentFlowService:
             message="Payment status retrieved",
             plate_text=session["plate_text"],
             session_id=session["session_id"],
+            access_type=session.get("access_type", "VISITOR"),
             payment_status=session["payment_status"],
             amount_due=amount_due,
             paid_at=session["paid_at"],
@@ -348,6 +380,7 @@ class PaymentFlowService:
             session_id=payload.session_id,
             plate_text=payload.plate_text,
             payment_status=payload.payment_status,
+            access_type=payload.access_type,
         )
         amount_due = self._effective_amount(session)
         return self._to_session_detail(session, amount_due)
@@ -399,6 +432,7 @@ class PaymentFlowService:
             entry_time=session["entry_time"],
             exit_time=session.get("exit_time"),
             session_status=session.get("session_status", "INSIDE"),
+            access_type=session.get("access_type", "VISITOR"),
             payment_status=session["payment_status"],
             amount_due=round(amount_due, 2),
             currency=session["currency"],
@@ -422,6 +456,7 @@ class PaymentFlowService:
             entry_time=session["entry_time"],
             exit_time=session.get("exit_time"),
             session_status=session.get("session_status"),
+            access_type=session.get("access_type", "VISITOR"),
             duration_minutes=self._effective_duration_minutes(session),
             amount=round(self._effective_amount(session), 2),
             currency=session["currency"],
@@ -444,6 +479,7 @@ class PaymentFlowService:
             currency=session["currency"],
             payment_status=session["payment_status"],
             session_status=session.get("session_status", "INSIDE"),
+            access_type=session.get("access_type", "VISITOR"),
             payment_method=session.get("payment_method"),
             paid_at=session.get("paid_at"),
             paid_amount=session.get("paid_amount"),

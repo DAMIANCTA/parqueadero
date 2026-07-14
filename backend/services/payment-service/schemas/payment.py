@@ -1,11 +1,12 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 
 PaymentMethod = Literal["cash", "card", "transfer", "mobile", "online", "other"]
 PaymentStatus = Literal["PENDING", "PAID", "NOT_REQUIRED", "FAILED", "CANCELLED", "REFUNDED"]
+AccessType = Literal["VISITOR", "MEMBER"]
 
 
 class SessionPaymentDetail(BaseModel):
@@ -15,6 +16,7 @@ class SessionPaymentDetail(BaseModel):
     entry_time: datetime
     exit_time: datetime | None = None
     session_status: str = "INSIDE"
+    access_type: AccessType = "VISITOR"
     payment_status: PaymentStatus
     amount_due: float
     currency: str
@@ -55,6 +57,7 @@ class CashierPaymentLookupResponse(BaseModel):
     entry_time: datetime | None = None
     exit_time: datetime | None = None
     session_status: str | None = None
+    access_type: AccessType | None = None
     duration_minutes: int | None = None
     amount: float | None = None
     currency: str | None = None
@@ -68,11 +71,11 @@ class CashierPaymentLookupResponse(BaseModel):
 
 class CashierPaymentRegistrationRequest(BaseModel):
     session_id: str
-    plate_text: str = Field(min_length=3, max_length=20)
+    plate_text: str | None = Field(default=None, min_length=3, max_length=20)
     amount: float = Field(gt=0)
     payment_method: PaymentMethod
     cashier_user_id: str = Field(min_length=3, max_length=100)
-    notes: str | None = Field(default=None, max_length=500)
+    notes: str | None = Field(default=None, max_length=500, validation_alias=AliasChoices("notes", "observations"))
 
 
 class CashierPaymentRegistrationResponse(BaseModel):
@@ -109,6 +112,7 @@ class PaymentStatusByPlateResponse(BaseModel):
     message: str
     plate_text: str | None = None
     session_id: str | None = None
+    access_type: AccessType | None = None
     payment_status: PaymentStatus | None = None
     amount_due: float | None = None
     paid_at: datetime | None = None
@@ -122,6 +126,7 @@ class InternalSessionUpsertRequest(BaseModel):
     session_id: str
     plate_text: str = Field(min_length=3, max_length=20)
     payment_status: PaymentStatus = "PENDING"
+    access_type: AccessType = "VISITOR"
 
 
 class InternalSessionCloseRequest(BaseModel):
@@ -152,6 +157,7 @@ class AdminSessionItem(BaseModel):
     currency: str
     payment_status: PaymentStatus
     session_status: str
+    access_type: AccessType = "VISITOR"
     payment_method: PaymentMethod | None = None
     paid_at: datetime | None = None
     paid_amount: float | None = None

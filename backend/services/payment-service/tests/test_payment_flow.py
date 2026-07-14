@@ -1,5 +1,5 @@
 import unittest
-from copy import deepcopy
+from datetime import datetime, UTC
 
 from fastapi.testclient import TestClient
 
@@ -12,7 +12,7 @@ from security import encode_access_token
 class PaymentFlowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(app)
-        PaymentRepository.sessions = deepcopy(PaymentRepository.INITIAL_SESSIONS)
+        PaymentRepository.reset()
         token = encode_access_token(
             secret_key=settings.jwt_secret_key,
             issuer=settings.jwt_issuer,
@@ -144,10 +144,131 @@ class PaymentFlowTests(unittest.TestCase):
     def test_lookup_returns_not_found_for_outside_session(self) -> None:
         response = self.client.get("/payments/by-plate/VISDONE", headers=self.headers)
 
+        self.assertEqual(response.status_code, 404)
+        payload = response.json()
+        self.assertEqual(payload["detail"], "No hay una sesion activa para esta placa")
+
+    def test_payment_search_ignores_old_outside_sessions(self) -> None:
+        repository = PaymentRepository()
+        repository.sessions["session-old-paid-002"] = {
+            "session_id": "session-old-paid-002",
+            "plate_text": "MCB250",
+            "qr_code": "QR-MCB250-A",
+            "entry_time": datetime.now(UTC),
+            "exit_time": datetime.now(UTC),
+            "session_status": "OUTSIDE",
+            "access_type": "VISITOR",
+            "payment_status": "PAID",
+            "cashier_user_id": "cashier-001",
+            "amount": 1.50,
+            "paid_amount": 1.50,
+            "payment_method": "cash",
+            "paid_at": datetime.now(UTC),
+            "payment_valid_until": datetime.now(UTC),
+            "receipt_number": "REC-OLD-0001",
+            "notes": "Sesion historica",
+            "currency": "USD",
+        }
+        repository.upsert_session("session-current-pending-002", "MCB250", "PENDING", "VISITOR")
+
+        response = self.client.get("/payments/by-plate/MCB250", headers=self.headers)
+
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertFalse(payload["found"])
-        self.assertEqual(payload["message"], "No active session found for this plate")
+        self.assertEqual(payload["session_id"], "session-current-pending-002")
+        self.assertEqual(payload["payment_status"], "PENDING")
+        self.assertEqual(payload["access_type"], "VISITOR")
+
+    def test_payment_register_requires_active_inside_session(self) -> None:
+        response = self.client.post(
+            "/payments/register-cash-payment",
+            headers=self.headers,
+            json={
+                "session_id": "session-visitor-done-001",
+                "plate_text": "VISDONE",
+                "amount": 1.50,
+                "payment_method": "cash",
+                "cashier_user_id": "cashier.user",
+                "notes": "Pago tardio",
+            },
+        )
+
+        self.assertEqual(response.status_code, 409)
+        payload = response.json()
+        self.assertEqual(payload["detail"], "La sesion ya fue cerrada")
+
+    def test_member_not_required_is_not_cashier_payment(self) -> None:
+        repository = PaymentRepository()
+        repository.upsert_session("session-member-001", "MEM250", "NOT_REQUIRED", "MEMBER")
+
+        lookup_response = self.client.get("/payments/by-plate/MEM250", headers=self.headers)
+        self.assertEqual(lookup_response.status_code, 404)
+
+        payment_response = self.client.post(
+            "/payments/register-cash-payment",
+            headers=self.headers,
+            json={
+                "session_id": "session-member-001",
+                "plate_text": "MEM250",
+                "amount": 0.0 + 1.5,
+                "payment_method": "cash",
+                "cashier_user_id": "cashier.user",
+                "notes": "No deberia cobrar",
+            },
+        )
+
+        self.assertEqual(payment_response.status_code, 409)
+        payload = payment_response.json()
+        self.assertEqual(payload["detail"], "Pago no requerido para miembro universitario")
+
+    def test_visitor_can_pay_again_after_reentry(self) -> None:
+        repository = PaymentRepository()
+        repository.upsert_session("session-reentry-a", "MCB250", "PENDING", "VISITOR")
+
+        first_payment = self.client.post(
+            "/payments/register-cash-payment",
+            headers=self.headers,
+            json={
+                "session_id": "session-reentry-a",
+                "plate_text": "MCB250",
+                "amount": 1.50,
+                "payment_method": "cash",
+                "cashier_user_id": "cashier.user",
+                "notes": "Primer pago",
+            },
+        )
+        self.assertEqual(first_payment.status_code, 200)
+
+        repository.close_session(
+            session_id="session-reentry-a",
+            plate_text="MCB250",
+            payment_status="PAID",
+            exit_time=datetime.now(UTC),
+        )
+        repository.upsert_session("session-reentry-b", "MCB250", "PENDING", "VISITOR")
+
+        lookup = self.client.get("/payments/by-plate/MCB250", headers=self.headers)
+        self.assertEqual(lookup.status_code, 200)
+        lookup_payload = lookup.json()
+        self.assertEqual(lookup_payload["session_id"], "session-reentry-b")
+        self.assertEqual(lookup_payload["payment_status"], "PENDING")
+
+        second_payment = self.client.post(
+            "/payments/register-cash-payment",
+            headers=self.headers,
+            json={
+                "session_id": "session-reentry-b",
+                "plate_text": "MCB250",
+                "amount": 1.50,
+                "payment_method": "cash",
+                "cashier_user_id": "cashier.user",
+                "notes": "Segundo pago",
+            },
+        )
+        self.assertEqual(second_payment.status_code, 200)
+        second_payload = second_payment.json()
+        self.assertEqual(second_payload["session"]["session_id"], "session-reentry-b")
+        self.assertEqual(second_payload["session"]["payment_status"], "PAID")
 
     def test_admin_dashboard_summary_returns_operational_totals(self) -> None:
         response = self.client.get("/payments/admin/dashboard-summary", headers=self.headers)

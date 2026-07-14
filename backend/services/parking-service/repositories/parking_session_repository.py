@@ -1,9 +1,10 @@
 import uuid
+from copy import deepcopy
 from datetime import datetime, UTC
 
 
 class ParkingSessionRepository:
-    active_sessions = {
+    INITIAL_ACTIVE_SESSIONS = {
         "VIS1234": {
             "session_id": "session-visitor-paid-001",
             "session_status": "INSIDE",
@@ -43,15 +44,86 @@ class ParkingSessionRepository:
             "exit_time": None,
         },
     }
+    INITIAL_SESSION_RECORDS = {
+        session["session_id"]: session.copy()
+        for session in INITIAL_ACTIVE_SESSIONS.values()
+    }
+    active_sessions = deepcopy(INITIAL_ACTIVE_SESSIONS)
     active_visitor_sessions = {
         plate: session.copy()
         for plate, session in active_sessions.items()
         if session["person_type"] == "visitor"
     }
-    session_records = {
-        session["session_id"]: session.copy()
-        for session in active_sessions.values()
-    }
+    session_records = deepcopy(INITIAL_SESSION_RECORDS)
+
+    @classmethod
+    def reset(cls) -> None:
+        cls.active_sessions = deepcopy(cls.INITIAL_ACTIVE_SESSIONS)
+        cls.active_visitor_sessions = {
+            plate: session.copy()
+            for plate, session in cls.active_sessions.items()
+            if session["person_type"] == "visitor"
+        }
+        cls.session_records = deepcopy(cls.INITIAL_SESSION_RECORDS)
+
+    def has_active_session_by_plate(self, plate_text: str) -> bool:
+        return self.get_active_session_by_plate(plate_text) is not None
+
+    def get_active_session_by_plate(self, plate_text: str) -> dict | None:
+        normalized_plate = self._normalize_plate(plate_text)
+        session = self.active_sessions.get(normalized_plate)
+        return session.copy() if session else None
+
+    def get_active_visitor_session_by_plate(self, plate_text: str) -> dict | None:
+        normalized_plate = self._normalize_plate(plate_text)
+        session = self.active_visitor_sessions.get(normalized_plate)
+        return session.copy() if session else None
+
+    def create_new_session_for_entry(
+        self,
+        university_id: str,
+        campus_id: str,
+        gate_id: str,
+        plate_text: str,
+        person_type: str,
+        entry_face_image_id: str,
+        access_type: str = "VISITOR",
+        payment_status: str | None = None,
+        person_id: str | None = None,
+        person_name: str | None = None,
+        role_type: str | None = None,
+        vehicle_id: str | None = None,
+        entry_face_evidence_id: str | None = None,
+        entry_plate_evidence_id: str | None = None,
+        session_id: str | None = None,
+    ) -> dict:
+        del university_id, campus_id, gate_id
+        normalized_plate = self._normalize_plate(plate_text)
+        entry_time = datetime.now(UTC)
+        session = {
+            "session_id": session_id or str(uuid.uuid4()),
+            "session_status": "INSIDE",
+            "payment_status": payment_status or ("PENDING" if access_type == "VISITOR" else "NOT_REQUIRED"),
+            "person_type": person_type,
+            "access_type": access_type,
+            "plate_text": normalized_plate,
+            "person_id": person_id,
+            "person_name": person_name,
+            "role_type": role_type,
+            "vehicle_id": vehicle_id,
+            "entry_face_image_id": entry_face_image_id,
+            "entry_face_evidence_id": entry_face_evidence_id,
+            "entry_plate_evidence_id": entry_plate_evidence_id,
+            "exit_face_evidence_id": None,
+            "exit_plate_evidence_id": None,
+            "entry_time": entry_time,
+            "exit_time": None,
+        }
+        self.active_sessions[normalized_plate] = session.copy()
+        if access_type == "VISITOR":
+            self.active_visitor_sessions[normalized_plate] = session.copy()
+        self.session_records[session["session_id"]] = session.copy()
+        return self._session_summary(session)
 
     def create_entry_session(
         self,
@@ -71,36 +143,27 @@ class ParkingSessionRepository:
         entry_plate_evidence_id: str | None = None,
         session_id: str | None = None,
     ) -> dict:
-        del university_id, campus_id, gate_id
-        entry_time = datetime.now(UTC)
-        session = {
-            "session_id": session_id or str(uuid.uuid4()),
-            "session_status": "INSIDE",
-            "payment_status": payment_status or ("PENDING" if access_type == "VISITOR" else "NOT_REQUIRED"),
-            "person_type": person_type,
-            "access_type": access_type,
-            "plate_text": plate_text,
-            "person_id": person_id,
-            "person_name": person_name,
-            "role_type": role_type,
-            "vehicle_id": vehicle_id,
-            "entry_face_image_id": entry_face_image_id,
-            "entry_face_evidence_id": entry_face_evidence_id,
-            "entry_plate_evidence_id": entry_plate_evidence_id,
-            "exit_face_evidence_id": None,
-            "exit_plate_evidence_id": None,
-            "entry_time": entry_time,
-            "exit_time": None,
-        }
-        self.active_sessions[plate_text] = session.copy()
-        if access_type == "VISITOR":
-            self.active_visitor_sessions[plate_text] = session.copy()
-        self.session_records[session["session_id"]] = session.copy()
-        return self._session_summary(session)
+        return self.create_new_session_for_entry(
+            university_id=university_id,
+            campus_id=campus_id,
+            gate_id=gate_id,
+            plate_text=plate_text,
+            person_type=person_type,
+            entry_face_image_id=entry_face_image_id,
+            access_type=access_type,
+            payment_status=payment_status,
+            person_id=person_id,
+            person_name=person_name,
+            role_type=role_type,
+            vehicle_id=vehicle_id,
+            entry_face_evidence_id=entry_face_evidence_id,
+            entry_plate_evidence_id=entry_plate_evidence_id,
+            session_id=session_id,
+        )
 
     def find_active_session_by_plate(self, university_id: str, plate_text: str) -> dict | None:
         del university_id
-        return self.active_sessions.get(plate_text)
+        return self.get_active_session_by_plate(plate_text)
 
     def close_session(
         self,
@@ -142,6 +205,9 @@ class ParkingSessionRepository:
         )
         self.session_records[session_id] = record
         return self._session_summary(record)
+
+    def _normalize_plate(self, plate_text: str) -> str:
+        return plate_text.strip().upper().replace(" ", "").replace("-", "")
 
     def create_registered_exit_record(
         self,

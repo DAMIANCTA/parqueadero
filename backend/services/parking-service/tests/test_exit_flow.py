@@ -6,12 +6,92 @@ from fastapi.testclient import TestClient
 
 from config import settings
 from main import app
+from repositories.parking_session_repository import ParkingSessionRepository
+from routes.parking import exit_service
 from security import encode_access_token
 
 
 class ParkingExitFlowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(app)
+        ParkingSessionRepository.reset()
+        self.exit_face_patcher = patch.object(
+            exit_service.face_service,
+            "verify_session_face",
+            side_effect=lambda **kwargs: {
+                "accepted": True,
+                "detected": True,
+                "match": True,
+                "similarity": 0.91,
+                "threshold": settings.face_similarity_threshold,
+                "image_id": kwargs["face_image_id"],
+                "template_id": None,
+                "provider": "mock-face-service",
+                "model_name": "mock-face-model",
+                "mode": "mock",
+                "quality_score": kwargs.get("confidence_face", 0.95),
+                "embedding_size": 16,
+                "bounding_box": None,
+                "warnings": [],
+            },
+        )
+        self.exit_member_patcher = patch.object(
+            exit_service.vehicle_authorization_repository,
+            "validate_member_exit",
+            side_effect=lambda **kwargs: {
+                "authorized": kwargs["plate_text"] == "ABC1234",
+                "vehicle_registered": kwargs["plate_text"] in {"ABC1234", "EXP2026"},
+                "person_id": "person-student-001" if kwargs["plate_text"] == "ABC1234" else "person-staff-001",
+                "person_name": "Ana Belen Torres" if kwargs["plate_text"] == "ABC1234" else "Maria Fernanda Ruiz",
+                "role_type": "STUDENT" if kwargs["plate_text"] == "ABC1234" else "STAFF",
+                "vehicle_id": "vehicle-001" if kwargs["plate_text"] == "ABC1234" else "vehicle-004",
+                "plate_text": kwargs["plate_text"],
+                "permit_status": "VALID" if kwargs["plate_text"] == "ABC1234" else "EXPIRED",
+                "face_match": kwargs["plate_text"] == "ABC1234",
+                "similarity": 0.91 if kwargs["plate_text"] == "ABC1234" else 0.23,
+                "provider": "mock-face-service",
+                "template_id": "template-student-001" if kwargs["plate_text"] == "ABC1234" else "template-staff-001",
+                "warnings": [] if kwargs["plate_text"] == "ABC1234" else ["FACE_VERIFICATION_FAILED"],
+            },
+        )
+        self.exit_payment_status_patcher = patch.object(
+            exit_service.payment_repository,
+            "get_status_by_plate",
+            side_effect=lambda plate: {
+                "found": True,
+                "payment_status": "PAID",
+                "paid_at": (datetime.now(UTC) - timedelta(minutes=4)).isoformat(),
+                "paid_amount": 1.50,
+                "payment_valid_until": (datetime.now(UTC) + timedelta(minutes=11)).isoformat(),
+            }
+            if plate == "VIS1234"
+            else {
+                "found": True,
+                "payment_status": "PENDING",
+                "paid_at": None,
+                "paid_amount": None,
+                "payment_valid_until": None,
+            },
+        )
+        self.exit_open_gate_patcher = patch.object(
+            exit_service.iot_repository,
+            "open_gate",
+            return_value={"gate_id": "gate-test", "command": "open", "published": True},
+        )
+        self.exit_deny_gate_patcher = patch.object(
+            exit_service.iot_repository,
+            "deny_gate",
+            return_value={"gate_id": "gate-test", "command": "deny", "published": True},
+        )
+        for patcher in (
+            self.exit_face_patcher,
+            self.exit_member_patcher,
+            self.exit_payment_status_patcher,
+            self.exit_open_gate_patcher,
+            self.exit_deny_gate_patcher,
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
         token = encode_access_token(
             secret_key=settings.jwt_secret_key,
             issuer=settings.jwt_issuer,

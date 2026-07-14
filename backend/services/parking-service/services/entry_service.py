@@ -49,6 +49,13 @@ class EntryService:
                 reason="Liveness score too low",
             )
 
+        if self.parking_session_repository.has_active_session_by_plate(normalized_plate):
+            return self._reject(
+                payload=payload,
+                normalized_plate=normalized_plate,
+                reason="El vehiculo ya se encuentra dentro",
+            )
+
         session_id = str(uuid.uuid4())
         face_validation = self.face_service.validate_entry_face(
             university_id=payload.university_id,
@@ -112,7 +119,7 @@ class EntryService:
             session_vehicle_id = member_validation.get("vehicle_id")
             payment_status = "NOT_REQUIRED"
 
-        session_record = self.parking_session_repository.create_entry_session(
+        session_record = self.parking_session_repository.create_new_session_for_entry(
             university_id=payload.university_id,
             campus_id=payload.campus_id,
             gate_id=payload.gate_id,

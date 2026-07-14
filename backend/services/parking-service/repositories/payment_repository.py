@@ -6,7 +6,7 @@ from config import settings
 
 
 class PaymentRepository:
-    def sync_session(self, session_id: str, plate_text: str, payment_status: str) -> dict | None:
+    def sync_session(self, session_id: str, plate_text: str, payment_status: str, access_type: str) -> dict | None:
         try:
             response = httpx.post(
                 f"{settings.payment_service_url}/payments/internal/sessions/upsert",
@@ -14,6 +14,7 @@ class PaymentRepository:
                     "session_id": session_id,
                     "plate_text": plate_text,
                     "payment_status": payment_status,
+                    "access_type": access_type,
                 },
                 headers={"X-Internal-Audit-Key": settings.audit_internal_key},
                 timeout=settings.payment_service_timeout_seconds,
@@ -24,10 +25,10 @@ class PaymentRepository:
             return None
 
     def sync_visitor_session(self, session_id: str, plate_text: str) -> dict | None:
-        return self.sync_session(session_id=session_id, plate_text=plate_text, payment_status="PENDING")
+        return self.sync_session(session_id=session_id, plate_text=plate_text, payment_status="PENDING", access_type="VISITOR")
 
     def sync_member_session(self, session_id: str, plate_text: str) -> dict | None:
-        return self.sync_session(session_id=session_id, plate_text=plate_text, payment_status="NOT_REQUIRED")
+        return self.sync_session(session_id=session_id, plate_text=plate_text, payment_status="NOT_REQUIRED", access_type="MEMBER")
 
     def get_status_by_plate(self, plate_text: str) -> dict | None:
         try:

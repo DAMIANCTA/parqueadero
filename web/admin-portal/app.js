@@ -27,6 +27,7 @@ const state = {
   faceProfiles: [],
   cashierPlateQuery: "",
   currentSession: null,
+  selectedPaymentSession: null,
   cashierMessage: "",
   receiptMessage: "",
   memberMessage: "",
@@ -473,6 +474,7 @@ async function searchSessionByPlate(event) {
 
   state.cashierPlateQuery = plate;
   state.currentSession = null;
+  state.selectedPaymentSession = null;
   state.cashierMessage = "Consultando sesion activa...";
   state.receiptMessage = "";
   render();
@@ -486,13 +488,16 @@ async function searchSessionByPlate(event) {
     }
     if (!body.found) {
       state.currentSession = null;
+      state.selectedPaymentSession = null;
       state.cashierMessage = "No hay sesion activa para esta placa.";
     } else {
       state.currentSession = body;
+      state.selectedPaymentSession = body;
       state.cashierMessage = body.payment_status === "PAID" ? "Pago registrado." : "Sesion activa encontrada.";
     }
   } catch (error) {
     state.currentSession = null;
+    state.selectedPaymentSession = null;
     state.cashierMessage = localizeBackendMessage(error.message || "No se pudo consultar la sesion.");
   }
   render();
@@ -500,7 +505,7 @@ async function searchSessionByPlate(event) {
 
 async function registerPayment(event) {
   event.preventDefault();
-  if (!state.currentSession) {
+  if (!state.selectedPaymentSession) {
     state.cashierMessage = "Busca una sesion activa antes de registrar pago.";
     render();
     return;
@@ -526,8 +531,8 @@ async function registerPayment(event) {
         ...authHeaders(),
       },
       body: JSON.stringify({
-        session_id: state.currentSession.session_id,
-        plate_text: state.currentSession.plate_text,
+        session_id: state.selectedPaymentSession.session_id,
+        plate_text: state.selectedPaymentSession.plate_text,
         amount,
         payment_method: paymentMethod,
         cashier_user_id: state.auth.username,
@@ -539,6 +544,7 @@ async function registerPayment(event) {
       throw new Error(localizeBackendMessage(parseDetail(body.detail) || "No se pudo registrar el pago."));
     }
     state.currentSession = body.session;
+    state.selectedPaymentSession = body.session;
     state.cashierMessage = "Pago registrado correctamente.";
     state.receiptMessage = `Comprobante ${body.receipt_number || "-"} generado.`;
     await refreshOverview();
@@ -567,6 +573,7 @@ function openCashierForPlate(plate) {
   state.section = "cashier";
   state.cashierPlateQuery = plate;
   state.currentSession = null;
+  state.selectedPaymentSession = null;
   state.cashierMessage = `Placa seleccionada: ${plate}. Busca para cargar la sesion.`;
   render();
   const inputNode = document.querySelector('input[name="plate"]');
@@ -1416,7 +1423,11 @@ function localizeBackendMessage(message) {
   const text = String(message || "").trim();
   if (!text) return "Ocurrio un error inesperado.";
   if (text === "No active session found for this plate") return "No hay sesion activa para esta placa.";
+  if (text === "No hay una sesion activa para esta placa") return "No hay sesion activa para esta placa.";
   if (text.startsWith("Active session not found for plate")) return "No se encontro una sesion activa para esa placa.";
+  if (text === "La sesion ya fue cerrada") return "La sesion ya fue cerrada.";
+  if (text === "Pago ya registrado para esta entrada") return "Pago ya registrado para esta entrada.";
+  if (text === "Pago no requerido para miembro universitario") return "Pago no requerido para miembro universitario.";
   if (text === "Cannot register payment for a closed session") {
     return "No se puede registrar un pago para una sesion ya cerrada.";
   }

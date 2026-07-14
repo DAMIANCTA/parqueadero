@@ -13,6 +13,7 @@ class PaymentRepository:
             "entry_time": datetime.now(UTC) - timedelta(hours=2, minutes=10),
             "exit_time": None,
             "session_status": "INSIDE",
+            "access_type": "VISITOR",
             "payment_status": "PAID",
             "cashier_user_id": "cashier-001",
             "amount": 2.25,
@@ -31,6 +32,7 @@ class PaymentRepository:
             "entry_time": datetime.now(UTC) - timedelta(minutes=35),
             "exit_time": None,
             "session_status": "INSIDE",
+            "access_type": "VISITOR",
             "payment_status": "PENDING",
             "cashier_user_id": None,
             "amount": None,
@@ -49,6 +51,7 @@ class PaymentRepository:
             "entry_time": datetime.now(UTC) - timedelta(hours=1, minutes=30),
             "exit_time": datetime.now(UTC) - timedelta(minutes=12),
             "session_status": "OUTSIDE",
+            "access_type": "VISITOR",
             "payment_status": "PAID",
             "cashier_user_id": "cashier-001",
             "amount": 2.25,
@@ -63,16 +66,34 @@ class PaymentRepository:
     }
     sessions = deepcopy(INITIAL_SESSIONS)
 
+    @classmethod
+    def reset(cls) -> None:
+        cls.sessions = deepcopy(cls.INITIAL_SESSIONS)
+
     def find_by_plate(self, plate: str) -> dict | None:
+        return self.find_active_visitor_session_by_plate(plate)
+
+    def find_active_visitor_session_by_plate(self, plate: str) -> dict | None:
         normalized_plate = plate.strip().upper()
-        for session in self.sessions.values():
-            if session["plate_text"] == normalized_plate and session["session_status"] == "INSIDE":
-                return session.copy()
-        return None
+        matches = [
+            session.copy()
+            for session in self.sessions.values()
+            if session["plate_text"] == normalized_plate
+            and session["session_status"] == "INSIDE"
+            and session.get("access_type", "VISITOR") == "VISITOR"
+        ]
+        if not matches:
+            return None
+        matches.sort(key=lambda item: item["entry_time"], reverse=True)
+        return matches[0]
 
     def find_by_qr(self, qr_code: str) -> dict | None:
         for session in self.sessions.values():
-            if session["qr_code"] == qr_code and session["session_status"] == "INSIDE":
+            if (
+                session["qr_code"] == qr_code
+                and session["session_status"] == "INSIDE"
+                and session.get("access_type", "VISITOR") == "VISITOR"
+            ):
                 return session.copy()
         return None
 
@@ -90,15 +111,22 @@ class PaymentRepository:
             notes=session.get("notes"),
         )
 
-    def upsert_session(self, session_id: str, plate_text: str, payment_status: str = "PENDING") -> dict:
+    def upsert_session(
+        self,
+        session_id: str,
+        plate_text: str,
+        payment_status: str = "PENDING",
+        access_type: str = "VISITOR",
+    ) -> dict:
         normalized_plate = plate_text.strip().upper()
-        existing = self.find_by_plate(normalized_plate)
+        existing = self.sessions.get(session_id)
         if existing is not None:
-            session = self.sessions[existing["session_id"]]
-            session["session_id"] = session_id
+            session = existing
             session["plate_text"] = normalized_plate
             session["session_status"] = "INSIDE"
+            session["access_type"] = access_type
             session["payment_status"] = payment_status
+            session["exit_time"] = None
             if payment_status == "PENDING":
                 session["amount"] = None
                 session["paid_amount"] = None
@@ -107,7 +135,7 @@ class PaymentRepository:
                 session["payment_valid_until"] = None
                 session["receipt_number"] = None
                 session["notes"] = None
-                session["exit_time"] = None
+                session["cashier_user_id"] = None
             elif payment_status == "NOT_REQUIRED":
                 session["amount"] = 0.0
                 session["paid_amount"] = None
@@ -116,7 +144,7 @@ class PaymentRepository:
                 session["payment_valid_until"] = None
                 session["receipt_number"] = None
                 session["notes"] = "Monthly permit / member access"
-                session["exit_time"] = None
+                session["cashier_user_id"] = None
             return session.copy()
 
         session = {
@@ -126,6 +154,7 @@ class PaymentRepository:
             "entry_time": datetime.now(UTC),
             "exit_time": None,
             "session_status": "INSIDE",
+            "access_type": access_type,
             "payment_status": payment_status,
             "cashier_user_id": None,
             "amount": None,
@@ -144,7 +173,7 @@ class PaymentRepository:
         return session.copy()
 
     def mark_as_paid_by_plate(self, plate_text: str, cashier_user_id: str, amount: float, payment_method: str) -> dict | None:
-        session = self.find_by_plate(plate_text)
+        session = self.find_active_visitor_session_by_plate(plate_text)
         if session is None:
             return None
         return self.mark_as_paid(
@@ -167,7 +196,6 @@ class PaymentRepository:
         session = self.sessions.get(session_id)
         if session is None:
             return None
-
         session["plate_text"] = plate_text.strip().upper()
         return self._apply_paid_state(
             session=session,

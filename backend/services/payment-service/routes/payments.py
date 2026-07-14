@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from config import settings
 from schemas.payment import (
@@ -37,7 +37,10 @@ def get_session_by_qr(qr_code: str) -> PaymentSessionResponse:
 
 @router.get("/by-plate/{plate_text}", response_model=CashierPaymentLookupResponse, dependencies=[require_permissions("payments.read")])
 def get_active_payment_by_plate(plate_text: str) -> CashierPaymentLookupResponse:
-    return payment_service.get_active_payment_by_plate(plate_text)
+    response = payment_service.get_active_payment_by_plate(plate_text)
+    if not response.found:
+        raise HTTPException(status_code=404, detail=response.message)
+    return response
 
 
 @router.get("/admin/dashboard-summary", response_model=AdminDashboardSummaryResponse, dependencies=[require_permissions("payments.read")])
