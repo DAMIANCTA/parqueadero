@@ -9,6 +9,7 @@ import '../models/app_models.dart';
 import '../services/api_client.dart';
 import '../services/image_preparation_service.dart';
 import '../state/parking_app_scope.dart';
+import 'plate_camera_capture_screen.dart';
 import 'result_screen.dart';
 
 class ExitModeScreen extends StatefulWidget {
@@ -252,6 +253,10 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
 
   Future<void> _pickEvidence({required bool isFace, required ImageSource source}) async {
     if (!isFace) {
+      if (source == ImageSource.camera) {
+        await _capturePlateWithEmbeddedCamera();
+        return;
+      }
       await _collectPlateEvidences(source: source);
       return;
     }
@@ -270,6 +275,47 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo obtener la imagen.')),
+      );
+    }
+  }
+
+  Future<void> _capturePlateWithEmbeddedCamera() async {
+    try {
+      final capturedFiles = await Navigator.of(context).push<List<XFile>>(
+        MaterialPageRoute<List<XFile>>(
+          builder: (_) => const PlateCameraCaptureScreen(),
+        ),
+      );
+
+      if (capturedFiles == null || capturedFiles.isEmpty) {
+        return;
+      }
+
+      final drafts = <LocalEvidenceDraft>[];
+      for (var index = 0; index < capturedFiles.length && index < 3; index++) {
+        final file = capturedFiles[index];
+        drafts.add(
+          await _imagePreparationService.buildDraft(
+            file: file,
+            label: 'Capturada ${index + 1}',
+          ),
+        );
+      }
+
+      if (drafts.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudieron procesar las capturas de placa.')),
+        );
+        return;
+      }
+
+      _setPlateEvidenceDrafts(drafts);
+      await _uploadAndDetectPlateBatch();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La captura interna de placa fallo. Intenta nuevamente.')),
       );
     }
   }
@@ -608,7 +654,7 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
                 FilledButton.icon(
                   onPressed: _processingPlateEvidence ? null : () => _pickEvidence(isFace: false, source: ImageSource.camera),
                   icon: const Icon(Icons.photo_camera_outlined),
-                  label: const Text('Capturar 3 placas'),
+                  label: const Text('Capturar placa'),
                 ),
               OutlinedButton.icon(
                 onPressed: _processingPlateEvidence ? null : () => _useMockEvidence(isFace: false),
@@ -617,7 +663,12 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
               ),
               if (_plateEvidences.isNotEmpty)
                 OutlinedButton.icon(
-                  onPressed: _processingPlateEvidence ? null : _uploadAndDetectPlateBatch,
+                  onPressed: _processingPlateEvidence
+                      ? null
+                      : () => _pickEvidence(
+                            isFace: false,
+                            source: _supportsCameraCapture ? ImageSource.camera : ImageSource.gallery,
+                          ),
                   icon: const Icon(Icons.refresh),
                   label: const Text('Reintentar captura'),
                 ),
