@@ -92,6 +92,41 @@ def require_permissions(*required_permissions: str):
     return Depends(dependency)
 
 
+def require_any_permissions(*required_permissions: str):
+    def dependency(request: Request) -> dict[str, Any]:
+        user = get_request_user(request)
+        granted = set(user.get("permissions", []))
+        if "*" in granted:
+            return user
+        if required_permissions and not any(permission in granted for permission in required_permissions):
+            raise HTTPException(status_code=403, detail=f"Missing permissions: {', '.join(required_permissions)}")
+        return user
+
+    return Depends(dependency)
+
+
+def has_role(user: dict[str, Any], *roles: str) -> bool:
+    granted = {str(role).upper() for role in user.get("roles", [])}
+    expected = {str(role).upper() for role in roles}
+    return bool(granted.intersection(expected))
+
+
+def is_super_admin(user: dict[str, Any]) -> bool:
+    return has_role(user, "SUPER_ADMIN")
+
+
+def resolve_university_scope(user: dict[str, Any], requested_university_id: str | None = None) -> str | None:
+    if is_super_admin(user):
+        return requested_university_id
+
+    actor_university_id = user.get("university_id")
+    if not actor_university_id:
+        raise HTTPException(status_code=403, detail="User is not assigned to a university")
+    if requested_university_id and requested_university_id != actor_university_id:
+        raise HTTPException(status_code=403, detail="Cross-university access is not allowed")
+    return actor_university_id
+
+
 def verify_internal_audit_key(request: Request, expected_key: str) -> None:
     provided_key = request.headers.get("X-Internal-Audit-Key", "")
     if not expected_key or provided_key != expected_key:

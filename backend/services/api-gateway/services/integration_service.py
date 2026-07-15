@@ -20,6 +20,8 @@ from schemas.integration import (
     PaymentByPlateRequest,
     PlateDetectBatchRequest,
     PlateDetectRequest,
+    UniversityCreateRequest,
+    UserCreateRequest,
     VehicleAuthorizationRequest,
     VehicleCreateRequest,
 )
@@ -99,10 +101,53 @@ class IntegrationService:
             payload.model_dump(),
         )
 
+    def issue_login(self, payload: LoginRequest) -> dict:
+        return self._post_json_without_token(
+            self.targets["auth"],
+            "/auth/login",
+            payload.model_dump(),
+        )
+
     def get_current_user(self, bearer_token: str) -> dict:
         return self._get_json_with_passthrough_token(
             self.targets["auth"],
             "/auth/me",
+            bearer_token,
+        )
+
+    def list_universities(self, bearer_token: str) -> dict:
+        return self._get_json_with_passthrough_token(
+            self.targets["auth"],
+            "/universities",
+            bearer_token,
+        )
+
+    def create_university(self, payload: UniversityCreateRequest, bearer_token: str) -> dict:
+        return self._post_json_with_passthrough_token(
+            self.targets["auth"],
+            "/universities",
+            payload.model_dump(),
+            bearer_token,
+        )
+
+    def list_users(self, bearer_token: str, university_id: str | None = None, role: str | None = None) -> dict:
+        query_parts = []
+        if university_id:
+            query_parts.append(f"university_id={university_id}")
+        if role:
+            query_parts.append(f"role={role}")
+        suffix = f"?{'&'.join(query_parts)}" if query_parts else ""
+        return self._get_json_with_passthrough_token(
+            self.targets["auth"],
+            f"/users{suffix}",
+            bearer_token,
+        )
+
+    def create_user(self, payload: UserCreateRequest, bearer_token: str) -> dict:
+        return self._post_json_with_passthrough_token(
+            self.targets["auth"],
+            "/users",
+            payload.model_dump(),
             bearer_token,
         )
 
@@ -143,10 +188,11 @@ class IntegrationService:
             permissions=["payments.pay"],
         )
 
-    def get_payment_by_plate(self, plate_text: str) -> dict:
+    def get_payment_by_plate(self, plate_text: str, university_id: str | None = None) -> dict:
+        suffix = f"?university_id={university_id}" if university_id else ""
         return self._get_json(
             self.targets["payment"],
-            f"/payments/by-plate/{plate_text}",
+            f"/payments/by-plate/{plate_text}{suffix}",
             permissions=["payments.read"],
         )
 
@@ -181,27 +227,27 @@ class IntegrationService:
             permissions=["iot.gates.read"],
         )
 
-    def get_admin_dashboard_summary(self) -> dict:
+    def get_admin_dashboard_summary(self, university_id: str | None = None) -> dict:
         summary = self._get_json(
             self.targets["payment"],
-            "/payments/admin/dashboard-summary",
+            f"/payments/admin/dashboard-summary{f'?university_id={university_id}' if university_id else ''}",
             permissions=["payments.read"],
         )
         audit_events = self.get_admin_audit_events(limit=200)
         summary["rejected_exits_today"] = self._count_rejected_exits(audit_events.get("items", []))
         return summary
 
-    def get_admin_active_sessions(self) -> dict:
+    def get_admin_active_sessions(self, university_id: str | None = None) -> dict:
         return self._get_json(
             self.targets["payment"],
-            "/payments/admin/active-sessions",
+            f"/payments/admin/active-sessions{f'?university_id={university_id}' if university_id else ''}",
             permissions=["payments.read"],
         )
 
-    def get_admin_session_history(self) -> dict:
+    def get_admin_session_history(self, university_id: str | None = None) -> dict:
         return self._get_json(
             self.targets["payment"],
-            "/payments/admin/session-history",
+            f"/payments/admin/session-history{f'?university_id={university_id}' if university_id else ''}",
             permissions=["payments.read"],
         )
 
@@ -438,6 +484,25 @@ class IntegrationService:
             response = client.get(
                 f"{target.base_url}{path}",
                 headers={"Authorization": f"Bearer {bearer_token}"},
+            )
+        response.raise_for_status()
+        return response.json()
+
+    def _post_json_with_passthrough_token(
+        self,
+        target: DownstreamTarget,
+        path: str,
+        payload: dict,
+        bearer_token: str,
+    ) -> dict:
+        with httpx.Client(timeout=self._build_timeout(self.default_downstream_timeout)) as client:
+            response = client.post(
+                f"{target.base_url}{path}",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {bearer_token}",
+                    "Content-Type": "application/json",
+                },
             )
         response.raise_for_status()
         return response.json()

@@ -30,7 +30,14 @@ app.add_middleware(
     secret_key=settings.jwt_secret_key,
     issuer=settings.jwt_issuer,
     audience=settings.jwt_audience,
-    public_paths={"/health", "/version", "/auth/token", "/api/v1/auth/token"},
+    public_paths={
+        "/health",
+        "/version",
+        "/auth/login",
+        "/api/v1/auth/login",
+        "/auth/token",
+        "/api/v1/auth/token",
+    },
 )
 app.add_middleware(
     RateLimitMiddleware,

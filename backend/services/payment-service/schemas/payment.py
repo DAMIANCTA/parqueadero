@@ -11,6 +11,7 @@ AccessType = Literal["VISITOR", "MEMBER"]
 
 class SessionPaymentDetail(BaseModel):
     session_id: str
+    university_id: str | None = None
     plate_text: str
     qr_code: str
     entry_time: datetime
@@ -53,6 +54,7 @@ class CashierPaymentLookupResponse(BaseModel):
     found: bool
     message: str
     session_id: str | None = None
+    university_id: str | None = None
     plate_text: str | None = None
     entry_time: datetime | None = None
     exit_time: datetime | None = None
@@ -110,6 +112,7 @@ class PaymentStatusResponse(BaseModel):
 class PaymentStatusByPlateResponse(BaseModel):
     found: bool
     message: str
+    university_id: str | None = None
     plate_text: str | None = None
     session_id: str | None = None
     access_type: AccessType | None = None
@@ -124,6 +127,7 @@ class PaymentStatusByPlateResponse(BaseModel):
 
 class InternalSessionUpsertRequest(BaseModel):
     session_id: str
+    university_id: str | None = None
     plate_text: str = Field(min_length=3, max_length=20)
     payment_status: PaymentStatus = "PENDING"
     access_type: AccessType = "VISITOR"
@@ -149,6 +153,7 @@ class AdminDashboardSummaryResponse(BaseModel):
 
 class AdminSessionItem(BaseModel):
     session_id: str
+    university_id: str | None = None
     plate_text: str
     entry_time: datetime
     exit_time: datetime | None = None

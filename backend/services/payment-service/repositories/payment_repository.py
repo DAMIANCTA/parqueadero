@@ -5,9 +5,11 @@ from config import settings
 
 
 class PaymentRepository:
+    UCE_ID = "11111111-1111-1111-1111-111111111111"
     INITIAL_SESSIONS = {
         "session-visitor-paid-001": {
             "session_id": "session-visitor-paid-001",
+            "university_id": UCE_ID,
             "plate_text": "VIS1234",
             "qr_code": "QR-VIS1234",
             "entry_time": datetime.now(UTC) - timedelta(hours=2, minutes=10),
@@ -27,6 +29,7 @@ class PaymentRepository:
         },
         "session-visitor-pending-001": {
             "session_id": "session-visitor-pending-001",
+            "university_id": UCE_ID,
             "plate_text": "VISPEND",
             "qr_code": "QR-VISPEND",
             "entry_time": datetime.now(UTC) - timedelta(minutes=35),
@@ -46,6 +49,7 @@ class PaymentRepository:
         },
         "session-visitor-done-001": {
             "session_id": "session-visitor-done-001",
+            "university_id": UCE_ID,
             "plate_text": "VISDONE",
             "qr_code": "QR-VISDONE",
             "entry_time": datetime.now(UTC) - timedelta(hours=1, minutes=30),
@@ -70,15 +74,16 @@ class PaymentRepository:
     def reset(cls) -> None:
         cls.sessions = deepcopy(cls.INITIAL_SESSIONS)
 
-    def find_by_plate(self, plate: str) -> dict | None:
-        return self.find_active_visitor_session_by_plate(plate)
+    def find_by_plate(self, plate: str, university_id: str | None = None) -> dict | None:
+        return self.find_active_visitor_session_by_plate(plate, university_id=university_id)
 
-    def find_active_visitor_session_by_plate(self, plate: str) -> dict | None:
+    def find_active_visitor_session_by_plate(self, plate: str, university_id: str | None = None) -> dict | None:
         normalized_plate = plate.strip().upper()
         matches = [
             session.copy()
             for session in self.sessions.values()
             if session["plate_text"] == normalized_plate
+            and (university_id is None or session.get("university_id") == university_id)
             and session["session_status"] == "INSIDE"
             and session.get("access_type", "VISITOR") == "VISITOR"
         ]
@@ -114,6 +119,7 @@ class PaymentRepository:
     def upsert_session(
         self,
         session_id: str,
+        university_id: str | None,
         plate_text: str,
         payment_status: str = "PENDING",
         access_type: str = "VISITOR",
@@ -122,6 +128,7 @@ class PaymentRepository:
         existing = self.sessions.get(session_id)
         if existing is not None:
             session = existing
+            session["university_id"] = university_id or session.get("university_id") or self.UCE_ID
             session["plate_text"] = normalized_plate
             session["session_status"] = "INSIDE"
             session["access_type"] = access_type
@@ -149,6 +156,7 @@ class PaymentRepository:
 
         session = {
             "session_id": session_id,
+            "university_id": university_id or self.UCE_ID,
             "plate_text": normalized_plate,
             "qr_code": f"QR-{normalized_plate}",
             "entry_time": datetime.now(UTC),
@@ -172,8 +180,15 @@ class PaymentRepository:
         self.sessions[session_id] = session
         return session.copy()
 
-    def mark_as_paid_by_plate(self, plate_text: str, cashier_user_id: str, amount: float, payment_method: str) -> dict | None:
-        session = self.find_active_visitor_session_by_plate(plate_text)
+    def mark_as_paid_by_plate(
+        self,
+        plate_text: str,
+        cashier_user_id: str,
+        amount: float,
+        payment_method: str,
+        university_id: str | None = None,
+    ) -> dict | None:
+        session = self.find_active_visitor_session_by_plate(plate_text, university_id=university_id)
         if session is None:
             return None
         return self.mark_as_paid(

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, Request, UploadFile
 import httpx
 
 from schemas.integration import (
@@ -39,6 +39,12 @@ from schemas.integration import (
     PermitLookupResponse,
     PaymentByPlateRequest,
     PaymentByPlateResponse,
+    UniversityCreateRequest,
+    UniversityListResponse,
+    UniversityResponse,
+    UserCreateRequest,
+    UserListResponse,
+    UserResponse,
     VehicleAuthorizationRequest,
     VehicleAuthorizationResponse,
     VehicleCreateRequest,
@@ -46,7 +52,7 @@ from schemas.integration import (
     VehicleLookupResponse,
     VehicleResponse,
 )
-from security import require_permissions
+from security import get_request_user, require_permissions, resolve_university_scope
 from services.integration_service import IntegrationService
 
 
@@ -65,11 +71,20 @@ def issue_token(payload: LoginRequest) -> GatewayTokenResponse:
     return GatewayTokenResponse(**response)
 
 
+@router.post("/auth/login", response_model=GatewayTokenResponse)
+def issue_login(payload: LoginRequest) -> GatewayTokenResponse:
+    try:
+        response = integration_service.issue_login(payload)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Auth service unavailable: {exc}") from exc
+    return GatewayTokenResponse(**response)
+
+
 @router.get("/auth/me", response_model=CurrentUserResponse)
 def current_user(authorization: str | None = Header(default=None)) -> CurrentUserResponse:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="Bearer token required")
-    token = authorization.split(" ", 1)[1].strip()
+    token = _extract_bearer_token(authorization)
     try:
         response = integration_service.get_current_user(token)
     except httpx.HTTPStatusError as exc:
@@ -77,6 +92,49 @@ def current_user(authorization: str | None = Header(default=None)) -> CurrentUse
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Auth service unavailable: {exc}") from exc
     return CurrentUserResponse(**response)
+
+
+@router.get("/universities", response_model=UniversityListResponse, dependencies=[require_permissions("universities.read")])
+def list_universities(authorization: str | None = Header(default=None)) -> UniversityListResponse:
+    token = _extract_bearer_token(authorization)
+    response = integration_service.list_universities(token)
+    return UniversityListResponse(**response)
+
+
+@router.post("/universities", response_model=UniversityResponse, dependencies=[require_permissions("universities.write")])
+def create_university(payload: UniversityCreateRequest, authorization: str | None = Header(default=None)) -> UniversityResponse:
+    token = _extract_bearer_token(authorization)
+    response = integration_service.create_university(payload, token)
+    return UniversityResponse(**response)
+
+
+@router.get("/users", response_model=UserListResponse, dependencies=[require_permissions("users.read")])
+def list_users(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    university_id: str | None = None,
+    role: str | None = None,
+) -> UserListResponse:
+    user = get_request_user(request)
+    scoped_university_id = resolve_university_scope(user, university_id)
+    token = _extract_bearer_token(authorization)
+    response = integration_service.list_users(token, university_id=scoped_university_id, role=role)
+    return UserListResponse(**response)
+
+
+@router.post("/users", response_model=UserResponse, dependencies=[require_permissions("users.write")])
+def create_user(
+    request: Request,
+    payload: UserCreateRequest,
+    authorization: str | None = Header(default=None),
+) -> UserResponse:
+    user = get_request_user(request)
+    scoped_university_id = payload.university_id
+    if payload.university_id is not None or "*" not in set(user.get("permissions", [])):
+        scoped_university_id = resolve_university_scope(user, payload.university_id)
+    token = _extract_bearer_token(authorization)
+    response = integration_service.create_user(payload.model_copy(update={"university_id": scoped_university_id}), token)
+    return UserResponse(**response)
 
 
 @router.post("/parking/entry", response_model=ParkingAuthorizationResponse)
@@ -134,7 +192,7 @@ def deny_iot_gate(gate_id: str, payload: IotGateCommandRequest) -> IotGateComman
     return IotGateCommandResponse(**response)
 
 
-@router.get("/iot/gates/status/{gate_id}", response_model=IotGateStatusResponse)
+@router.get("/iot/gates/status/{gate_id}", response_model=IotGateStatusResponse, dependencies=[require_permissions("iot.gates.read")])
 def get_iot_gate_status(gate_id: str) -> IotGateStatusResponse:
     try:
         response = integration_service.get_iot_gate_status(gate_id)
@@ -156,10 +214,11 @@ def pay_by_plate(payload: PaymentByPlateRequest) -> PaymentByPlateResponse:
     return PaymentByPlateResponse(**response)
 
 
-@router.get("/payments/by-plate/{plate_text}", response_model=CashierPaymentLookupResponse)
-def get_payment_by_plate(plate_text: str) -> CashierPaymentLookupResponse:
+@router.get("/payments/by-plate/{plate_text}", response_model=CashierPaymentLookupResponse, dependencies=[require_permissions("payments.read")])
+def get_payment_by_plate(request: Request, plate_text: str) -> CashierPaymentLookupResponse:
     try:
-        response = integration_service.get_payment_by_plate(plate_text)
+        user = get_request_user(request)
+        response = integration_service.get_payment_by_plate(plate_text, resolve_university_scope(user, None))
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
     except httpx.HTTPError as exc:
@@ -182,10 +241,11 @@ def register_cash_payment(payload: CashierPaymentRegistrationRequest) -> Cashier
     return CashierPaymentRegistrationResponse(**response)
 
 
-@router.get("/admin/dashboard-summary", response_model=AdminDashboardSummaryResponse)
-def get_admin_dashboard_summary() -> AdminDashboardSummaryResponse:
+@router.get("/admin/dashboard-summary", response_model=AdminDashboardSummaryResponse, dependencies=[require_permissions("dashboard.read")])
+def get_admin_dashboard_summary(request: Request) -> AdminDashboardSummaryResponse:
     try:
-        response = integration_service.get_admin_dashboard_summary()
+        user = get_request_user(request)
+        response = integration_service.get_admin_dashboard_summary(resolve_university_scope(user, None))
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
     except httpx.HTTPError as exc:
@@ -193,10 +253,11 @@ def get_admin_dashboard_summary() -> AdminDashboardSummaryResponse:
     return AdminDashboardSummaryResponse(**response)
 
 
-@router.get("/admin/active-sessions", response_model=AdminSessionListResponse)
-def get_admin_active_sessions() -> AdminSessionListResponse:
+@router.get("/admin/active-sessions", response_model=AdminSessionListResponse, dependencies=[require_permissions("sessions.read")])
+def get_admin_active_sessions(request: Request) -> AdminSessionListResponse:
     try:
-        response = integration_service.get_admin_active_sessions()
+        user = get_request_user(request)
+        response = integration_service.get_admin_active_sessions(resolve_university_scope(user, None))
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
     except httpx.HTTPError as exc:
@@ -204,10 +265,11 @@ def get_admin_active_sessions() -> AdminSessionListResponse:
     return AdminSessionListResponse(**response)
 
 
-@router.get("/admin/session-history", response_model=AdminSessionListResponse)
-def get_admin_session_history() -> AdminSessionListResponse:
+@router.get("/admin/session-history", response_model=AdminSessionListResponse, dependencies=[require_permissions("history.read")])
+def get_admin_session_history(request: Request) -> AdminSessionListResponse:
     try:
-        response = integration_service.get_admin_session_history()
+        user = get_request_user(request)
+        response = integration_service.get_admin_session_history(resolve_university_scope(user, None))
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
     except httpx.HTTPError as exc:
@@ -215,7 +277,7 @@ def get_admin_session_history() -> AdminSessionListResponse:
     return AdminSessionListResponse(**response)
 
 
-@router.get("/admin/audit-events", response_model=AdminAuditEventListResponse)
+@router.get("/admin/audit-events", response_model=AdminAuditEventListResponse, dependencies=[require_permissions("audit.read")])
 def get_admin_audit_events() -> AdminAuditEventListResponse:
     try:
         response = integration_service.get_admin_audit_events()
@@ -283,26 +345,34 @@ def get_face_config() -> FaceServiceConfigResponse:
 
 
 @router.post("/members", response_model=MemberResponse, dependencies=[require_permissions("members.write")])
-def create_member(payload: MemberCreateRequest) -> MemberResponse:
-    response = integration_service.create_member(payload)
+def create_member(request: Request, payload: MemberCreateRequest) -> MemberResponse:
+    user = get_request_user(request)
+    response = integration_service.create_member(
+        payload.model_copy(update={"university_id": resolve_university_scope(user, payload.university_id)})
+    )
     return MemberResponse(**response)
 
 
 @router.get("/members", response_model=MemberListResponse, dependencies=[require_permissions("members.read")])
-def list_members(university_id: str | None = None) -> MemberListResponse:
-    response = integration_service.list_members(university_id)
+def list_members(request: Request, university_id: str | None = None) -> MemberListResponse:
+    user = get_request_user(request)
+    response = integration_service.list_members(resolve_university_scope(user, university_id))
     return MemberListResponse(**response)
 
 
 @router.post("/vehicles", response_model=VehicleResponse, dependencies=[require_permissions("vehicles.write")])
-def create_vehicle(payload: VehicleCreateRequest) -> VehicleResponse:
-    response = integration_service.create_vehicle(payload)
+def create_vehicle(request: Request, payload: VehicleCreateRequest) -> VehicleResponse:
+    user = get_request_user(request)
+    response = integration_service.create_vehicle(
+        payload.model_copy(update={"university_id": resolve_university_scope(user, payload.university_id)})
+    )
     return VehicleResponse(**response)
 
 
 @router.get("/vehicles", response_model=VehicleListResponse, dependencies=[require_permissions("vehicles.read")])
-def list_vehicles(university_id: str | None = None) -> VehicleListResponse:
-    response = integration_service.list_vehicles(university_id)
+def list_vehicles(request: Request, university_id: str | None = None) -> VehicleListResponse:
+    user = get_request_user(request)
+    response = integration_service.list_vehicles(resolve_university_scope(user, university_id))
     return VehicleListResponse(**response)
 
 
@@ -318,9 +388,10 @@ def enroll_member_face(member_id: str, payload: FaceEnrollMemberRequest) -> Face
     return FaceProfileResponse(**response)
 
 
-@router.get("/members/faces", response_model=FaceProfileListResponse, dependencies=[require_permissions("members.read")])
-def list_face_profiles(university_id: str | None = None) -> FaceProfileListResponse:
-    response = integration_service.list_face_profiles(university_id)
+@router.get("/members/faces", response_model=FaceProfileListResponse, dependencies=[require_permissions("faces.read")])
+def list_face_profiles(request: Request, university_id: str | None = None) -> FaceProfileListResponse:
+    user = get_request_user(request)
+    response = integration_service.list_face_profiles(resolve_university_scope(user, university_id))
     return FaceProfileListResponse(**response)
 
 
@@ -337,14 +408,18 @@ def authorize_vehicle_person(vehicle_id: str, payload: VehicleAuthorizationReque
 
 
 @router.post("/permits/monthly", response_model=MonthlyPermitResponse, dependencies=[require_permissions("permits.write")])
-def create_monthly_permit(payload: MonthlyPermitCreateRequest) -> MonthlyPermitResponse:
-    response = integration_service.create_monthly_permit(payload)
+def create_monthly_permit(request: Request, payload: MonthlyPermitCreateRequest) -> MonthlyPermitResponse:
+    user = get_request_user(request)
+    response = integration_service.create_monthly_permit(
+        payload.model_copy(update={"university_id": resolve_university_scope(user, payload.university_id)})
+    )
     return MonthlyPermitResponse(**response)
 
 
 @router.get("/permits/monthly", response_model=MonthlyPermitListResponse, dependencies=[require_permissions("permits.read")])
-def list_monthly_permits(university_id: str | None = None) -> MonthlyPermitListResponse:
-    response = integration_service.list_monthly_permits(university_id)
+def list_monthly_permits(request: Request, university_id: str | None = None) -> MonthlyPermitListResponse:
+    user = get_request_user(request)
+    response = integration_service.list_monthly_permits(resolve_university_scope(user, university_id))
     return MonthlyPermitListResponse(**response)
 
 
@@ -358,3 +433,9 @@ def get_permit_by_plate(plate_text: str) -> PermitLookupResponse:
 def validate_member_entry(payload: MemberAccessValidationRequest) -> MemberAccessValidationResponse:
     response = integration_service.validate_member_entry(payload)
     return MemberAccessValidationResponse(**response)
+
+
+def _extract_bearer_token(authorization: str | None) -> str:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Bearer token required")
+    return authorization.split(" ", 1)[1].strip()

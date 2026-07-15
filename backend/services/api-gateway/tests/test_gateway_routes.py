@@ -19,8 +19,8 @@ class GatewayRouteTests(unittest.TestCase):
             claims={
                 "sub": "test-cashier",
                 "username": "cashier.user",
-                "roles": ["cashier"],
-                "permissions": ["payments.read", "payments.pay"],
+                "roles": ["CASHIER"],
+                "permissions": ["payments.read", "payments.pay", "dashboard.read", "history.read", "sessions.read", "iot.gates.read"],
                 "university_id": "11111111-1111-1111-1111-111111111111",
             },
         )
@@ -159,9 +159,20 @@ class GatewayRouteTests(unittest.TestCase):
             "access_token": "token-123",
             "token_type": "bearer",
             "expires_in": 3600,
-            "roles": ["cashier"],
+            "roles": ["CASHIER"],
             "permissions": ["payments.read", "payments.pay"],
             "university_id": "demo",
+            "user": {
+                "id": "user-cashier-001",
+                "username": "cashier.uce",
+                "full_name": "Caja UCE",
+                "email": "cashier@uce.edu.ec",
+                "role": "CASHIER",
+                "roles": ["CASHIER"],
+                "permissions": ["payments.read", "payments.pay"],
+                "university_id": "demo",
+                "status": "ACTIVE",
+            },
         }
 
         response = self.client.post(
@@ -172,10 +183,11 @@ class GatewayRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["access_token"], "token-123")
-        self.assertEqual(body["roles"], ["cashier"])
+        self.assertEqual(body["roles"], ["CASHIER"])
+        self.assertEqual(body["user"]["role"], "CASHIER")
 
     @patch("routes.integration.integration_service.get_admin_dashboard_summary")
-    def test_admin_dashboard_summary_is_public_for_local_portal(self, get_admin_dashboard_summary) -> None:
+    def test_admin_dashboard_summary_requires_authentication(self, get_admin_dashboard_summary) -> None:
         get_admin_dashboard_summary.return_value = {
             "active_sessions": 3,
             "vehicles_inside": 3,
@@ -186,7 +198,10 @@ class GatewayRouteTests(unittest.TestCase):
             "rejected_exits_today": 1,
         }
 
-        response = self.client.get("/admin/dashboard-summary")
+        unauthorized = self.client.get("/admin/dashboard-summary")
+        self.assertEqual(unauthorized.status_code, 401)
+
+        response = self.client.get("/admin/dashboard-summary", headers=self.headers)
 
         self.assertEqual(response.status_code, 200)
         body = response.json()

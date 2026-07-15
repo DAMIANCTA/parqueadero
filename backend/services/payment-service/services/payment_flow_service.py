@@ -39,8 +39,8 @@ class PaymentFlowService:
         session = self.payment_repository.find_by_qr(qr_code)
         return self._session_response(session, "qr")
 
-    def get_active_payment_by_plate(self, plate_text: str) -> CashierPaymentLookupResponse:
-        session = self.payment_repository.find_active_visitor_session_by_plate(plate_text)
+    def get_active_payment_by_plate(self, plate_text: str, university_id: str | None = None) -> CashierPaymentLookupResponse:
+        session = self.payment_repository.find_active_visitor_session_by_plate(plate_text, university_id=university_id)
         if session is None:
             return CashierPaymentLookupResponse(
                 found=False,
@@ -48,8 +48,8 @@ class PaymentFlowService:
             )
         return self._to_cashier_lookup(session)
 
-    def get_admin_dashboard_summary(self) -> AdminDashboardSummaryResponse:
-        sessions = list(self.payment_repository.sessions.values())
+    def get_admin_dashboard_summary(self, university_id: str | None = None) -> AdminDashboardSummaryResponse:
+        sessions = self._filtered_sessions(university_id)
         today = datetime.now(UTC).date()
         active_sessions = [session for session in sessions if session.get("session_status") == "INSIDE"]
         paid_today_sessions = [
@@ -75,19 +75,19 @@ class PaymentFlowService:
             rejected_exits_today=0,
         )
 
-    def get_admin_active_sessions(self) -> AdminSessionListResponse:
+    def get_admin_active_sessions(self, university_id: str | None = None) -> AdminSessionListResponse:
         sessions = [
             self._to_admin_session_item(session)
-            for session in self.payment_repository.sessions.values()
+            for session in self._filtered_sessions(university_id)
             if session.get("session_status") == "INSIDE"
         ]
         sessions.sort(key=lambda item: item.entry_time, reverse=True)
         return AdminSessionListResponse(total=len(sessions), items=sessions)
 
-    def get_admin_session_history(self) -> AdminSessionListResponse:
+    def get_admin_session_history(self, university_id: str | None = None) -> AdminSessionListResponse:
         sessions = [
             self._to_admin_session_item(session)
-            for session in self.payment_repository.sessions.values()
+            for session in self._filtered_sessions(university_id)
             if session.get("session_status") == "OUTSIDE"
         ]
         sessions.sort(key=lambda item: item.exit_time or item.entry_time, reverse=True)
@@ -351,8 +351,8 @@ class PaymentFlowService:
             exit_time=session.get("exit_time"),
         )
 
-    def get_status_by_plate(self, plate_text: str) -> PaymentStatusByPlateResponse:
-        session = self.payment_repository.find_active_visitor_session_by_plate(plate_text)
+    def get_status_by_plate(self, plate_text: str, university_id: str | None = None) -> PaymentStatusByPlateResponse:
+        session = self.payment_repository.find_active_visitor_session_by_plate(plate_text, university_id=university_id)
         if session is None:
             return PaymentStatusByPlateResponse(
                 found=False,
@@ -363,6 +363,7 @@ class PaymentFlowService:
         return PaymentStatusByPlateResponse(
             found=True,
             message="Payment status retrieved",
+            university_id=session.get("university_id"),
             plate_text=session["plate_text"],
             session_id=session["session_id"],
             access_type=session.get("access_type", "VISITOR"),
@@ -378,6 +379,7 @@ class PaymentFlowService:
     def upsert_internal_session(self, payload: InternalSessionUpsertRequest) -> SessionPaymentDetail:
         session = self.payment_repository.upsert_session(
             session_id=payload.session_id,
+            university_id=payload.university_id,
             plate_text=payload.plate_text,
             payment_status=payload.payment_status,
             access_type=payload.access_type,
@@ -427,6 +429,7 @@ class PaymentFlowService:
     def _to_session_detail(self, session: dict, amount_due: float) -> SessionPaymentDetail:
         return SessionPaymentDetail(
             session_id=session["session_id"],
+            university_id=session.get("university_id"),
             plate_text=session["plate_text"],
             qr_code=session["qr_code"],
             entry_time=session["entry_time"],
@@ -452,6 +455,7 @@ class PaymentFlowService:
             found=True,
             message="Pago registrado" if is_paid else "Sesion activa encontrada",
             session_id=session["session_id"],
+            university_id=session.get("university_id"),
             plate_text=session["plate_text"],
             entry_time=session["entry_time"],
             exit_time=session.get("exit_time"),
@@ -471,6 +475,7 @@ class PaymentFlowService:
     def _to_admin_session_item(self, session: dict) -> AdminSessionItem:
         return AdminSessionItem(
             session_id=session["session_id"],
+            university_id=session.get("university_id"),
             plate_text=session["plate_text"],
             entry_time=session["entry_time"],
             exit_time=session.get("exit_time"),
@@ -499,3 +504,9 @@ class PaymentFlowService:
         if session.get("payment_status") == "PAID" and paid_at is not None:
             return self.tariff_service.calculate_duration_minutes(session["entry_time"], paid_at)
         return self.tariff_service.calculate_duration_minutes(session["entry_time"])
+
+    def _filtered_sessions(self, university_id: str | None = None) -> list[dict]:
+        sessions = list(self.payment_repository.sessions.values())
+        if university_id:
+            sessions = [session for session in sessions if session.get("university_id") == university_id]
+        return sessions

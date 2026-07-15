@@ -93,7 +93,7 @@ class ExitService:
                 face_validation=face_match,
             )
 
-        payment_status = self.payment_repository.get_status_by_plate(normalized_plate)
+        payment_status = self.payment_repository.get_status_by_plate(normalized_plate, payload.university_id)
         effective_payment_status = payment_status["payment_status"] if payment_status and payment_status.get("found") else visitor_session["payment_status"]
         payment_valid_until = None
         if payment_status and payment_status.get("found") and payment_status.get("payment_valid_until"):

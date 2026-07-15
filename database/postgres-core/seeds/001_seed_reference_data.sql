@@ -1,9 +1,9 @@
 INSERT INTO universities (id, name, code, legal_name, country_code, status)
 VALUES (
     '11111111-1111-1111-1111-111111111111',
-    'Universidad Demo Smart Parking',
-    'UDSP',
-    'Universidad Demo Smart Parking S.A.',
+    'Universidad Central del Ecuador',
+    'UCE',
+    'Universidad Central del Ecuador',
     'EC',
     'active'
 )
@@ -66,12 +66,13 @@ VALUES
     ('44444444-4444-4444-4444-444444444402', 'admin_university', 'Administrador de Universidad', 'Gestiona configuracion y catalogos de una universidad.', 'active'),
     ('44444444-4444-4444-4444-444444444403', 'security', 'Seguridad', 'Monitorea accesos y eventos operativos.', 'active'),
     ('44444444-4444-4444-4444-444444444404', 'cashier', 'Cajero', 'Gestiona cobros y validaciones de pago.', 'active'),
-    ('44444444-4444-4444-4444-444444444405', 'gate_operator', 'Operador de Puerta', 'Opera ingreso y salida desde dispositivos de acceso.', 'active'),
-    ('44444444-4444-4444-4444-444444444406', 'student', 'Estudiante', 'Usuario institucional tipo estudiante.', 'active'),
-    ('44444444-4444-4444-4444-444444444407', 'teacher', 'Docente', 'Usuario institucional tipo docente.', 'active'),
-    ('44444444-4444-4444-4444-444444444408', 'employee', 'Empleado', 'Usuario institucional tipo trabajador.', 'active'),
-    ('44444444-4444-4444-4444-444444444409', 'visitor', 'Visitante', 'Usuario temporal sin autorizacion permanente.', 'active'),
-    ('44444444-4444-4444-4444-444444444410', 'auditor', 'Auditor', 'Consulta evidencias, reportes y auditoria.', 'active')
+    ('44444444-4444-4444-4444-444444444405', 'member_manager', 'Gestor de Miembros', 'Administra miembros, vehiculos, rostros y permisos mensuales.', 'active'),
+    ('44444444-4444-4444-4444-444444444406', 'gate_operator', 'Operador de Puerta', 'Opera ingreso y salida desde dispositivos de acceso.', 'active'),
+    ('44444444-4444-4444-4444-444444444407', 'student', 'Estudiante', 'Usuario institucional tipo estudiante.', 'active'),
+    ('44444444-4444-4444-4444-444444444408', 'teacher', 'Docente', 'Usuario institucional tipo docente.', 'active'),
+    ('44444444-4444-4444-4444-444444444409', 'employee', 'Empleado', 'Usuario institucional tipo trabajador.', 'active'),
+    ('44444444-4444-4444-4444-444444444410', 'visitor', 'Visitante', 'Usuario temporal sin autorizacion permanente.', 'active'),
+    ('44444444-4444-4444-4444-444444444411', 'auditor', 'Auditor', 'Consulta evidencias, reportes y auditoria.', 'active')
 ON CONFLICT (role_key) DO UPDATE
 SET
     display_name = EXCLUDED.display_name,

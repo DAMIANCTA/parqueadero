@@ -147,11 +147,13 @@ class EntryService:
         if access_type == "VISITOR":
             self.payment_repository.sync_visitor_session(
                 session_id=session_record["session_id"],
+                university_id=payload.university_id,
                 plate_text=normalized_plate,
             )
         else:
             self.payment_repository.sync_member_session(
                 session_id=session_record["session_id"],
+                university_id=payload.university_id,
                 plate_text=normalized_plate,
             )
         gate_command = self.iot_repository.open_gate(

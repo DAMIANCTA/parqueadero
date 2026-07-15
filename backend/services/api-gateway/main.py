@@ -33,6 +33,7 @@ app.add_middleware(
     public_paths={
         "/health",
         "/version",
+        "/auth/login",
         "/auth/token",
         "/parking/entry",
         "/parking/exit",
@@ -41,16 +42,12 @@ app.add_middleware(
         "/plates/detect",
         "/plates/detect-batch",
         "/faces/config",
-        "/admin/dashboard-summary",
-        "/admin/active-sessions",
-        "/admin/session-history",
-        "/admin/audit-events",
         "/admin-portal",
         "/admin-portal/",
         "/admin-portal/styles.css",
         "/admin-portal/app.js",
     },
-    public_path_prefixes=("/payments/by-plate/", "/iot/gates/status/"),
+    public_path_prefixes=tuple(),
 )
 app.add_middleware(
     RateLimitMiddleware,

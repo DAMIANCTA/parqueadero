@@ -36,26 +36,26 @@ def get_session_by_qr(qr_code: str) -> PaymentSessionResponse:
 
 
 @router.get("/by-plate/{plate_text}", response_model=CashierPaymentLookupResponse, dependencies=[require_permissions("payments.read")])
-def get_active_payment_by_plate(plate_text: str) -> CashierPaymentLookupResponse:
-    response = payment_service.get_active_payment_by_plate(plate_text)
+def get_active_payment_by_plate(plate_text: str, university_id: str | None = None) -> CashierPaymentLookupResponse:
+    response = payment_service.get_active_payment_by_plate(plate_text, university_id=university_id)
     if not response.found:
         raise HTTPException(status_code=404, detail=response.message)
     return response
 
 
 @router.get("/admin/dashboard-summary", response_model=AdminDashboardSummaryResponse, dependencies=[require_permissions("payments.read")])
-def get_admin_dashboard_summary() -> AdminDashboardSummaryResponse:
-    return payment_service.get_admin_dashboard_summary()
+def get_admin_dashboard_summary(university_id: str | None = None) -> AdminDashboardSummaryResponse:
+    return payment_service.get_admin_dashboard_summary(university_id=university_id)
 
 
 @router.get("/admin/active-sessions", response_model=AdminSessionListResponse, dependencies=[require_permissions("payments.read")])
-def get_admin_active_sessions() -> AdminSessionListResponse:
-    return payment_service.get_admin_active_sessions()
+def get_admin_active_sessions(university_id: str | None = None) -> AdminSessionListResponse:
+    return payment_service.get_admin_active_sessions(university_id=university_id)
 
 
 @router.get("/admin/session-history", response_model=AdminSessionListResponse, dependencies=[require_permissions("payments.read")])
-def get_admin_session_history() -> AdminSessionListResponse:
-    return payment_service.get_admin_session_history()
+def get_admin_session_history(university_id: str | None = None) -> AdminSessionListResponse:
+    return payment_service.get_admin_session_history(university_id=university_id)
 
 
 @router.post("/pay", response_model=PaymentResponse, dependencies=[require_permissions("payments.pay")])
@@ -79,9 +79,9 @@ def get_payment_status(session_id: str) -> PaymentStatusResponse:
 
 
 @router.get("/internal/status-by-plate", response_model=PaymentStatusByPlateResponse)
-def get_internal_payment_status_by_plate(request: Request, plate: str) -> PaymentStatusByPlateResponse:
+def get_internal_payment_status_by_plate(request: Request, plate: str, university_id: str | None = None) -> PaymentStatusByPlateResponse:
     verify_internal_audit_key(request, settings.audit_internal_key)
-    return payment_service.get_status_by_plate(plate)
+    return payment_service.get_status_by_plate(plate, university_id=university_id)
 
 
 @router.post("/internal/sessions/upsert", response_model=SessionPaymentDetail)

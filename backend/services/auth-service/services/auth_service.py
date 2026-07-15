@@ -2,74 +2,83 @@ from fastapi import HTTPException
 
 from config import settings
 from repositories.user_repository import UserRepository
-from schemas.auth import CurrentUserResponse, LoginRequest, TokenResponse
+from schemas.auth import (
+    AuthenticatedUserResponse,
+    CurrentUserResponse,
+    LoginRequest,
+    TokenResponse,
+    UniversityCreateRequest,
+    UniversityListResponse,
+    UniversityResponse,
+    UserCreateRequest,
+    UserListResponse,
+    UserResponse,
+)
 from security import encode_access_token
 
 
 ROLE_PERMISSIONS = {
-    "superadmin": ["*"],
-    "admin_university": [
-        "gateway.catalog.read",
+    "SUPER_ADMIN": ["*"],
+    "UNIVERSITY_ADMIN": [
+        "dashboard.read",
+        "sessions.read",
+        "history.read",
+        "audit.read",
         "universities.read",
+        "users.read",
+        "users.write",
         "members.read",
         "members.write",
         "vehicles.read",
         "vehicles.write",
         "permits.read",
         "permits.write",
-        "parking.entry",
-        "parking.exit",
+        "faces.read",
+        "faces.enroll",
+        "faces.verify",
+        "faces.compare",
+        "faces.liveness_check",
         "payments.read",
         "payments.pay",
-        "faces.enroll",
-        "faces.verify",
-        "faces.compare",
-        "faces.liveness_check",
-        "plates.detect",
+        "iot.gates.read",
         "iot.gates.open",
-        "audit.read",
-        "auth.mock.read",
-    ],
-    "security": [
-        "gateway.catalog.read",
-        "universities.read",
-        "members.read",
-        "vehicles.read",
-        "permits.read",
-        "parking.entry",
-        "parking.exit",
-        "faces.enroll",
-        "faces.verify",
-        "faces.compare",
-        "faces.liveness_check",
+        "iot.gates.deny",
         "plates.detect",
-        "audit.read",
     ],
-    "cashier": ["payments.read", "payments.pay", "permits.read", "permits.write", "members.read", "vehicles.read"],
-    "gate_operator": [
-        "parking.entry",
-        "parking.exit",
-        "members.read",
-        "vehicles.read",
-        "permits.read",
-        "faces.verify",
-        "faces.compare",
-        "faces.liveness_check",
-        "plates.detect",
-        "iot.gates.open",
-    ],
-    "student": [],
-    "teacher": [],
-    "employee": [],
-    "visitor": [],
-    "auditor": [
-        "gateway.catalog.read",
-        "universities.read",
-        "members.read",
-        "vehicles.read",
-        "permits.read",
+    "CASHIER": [
         "payments.read",
+        "payments.pay",
+        "history.read",
+    ],
+    "MEMBER_MANAGER": [
+        "members.read",
+        "members.write",
+        "vehicles.read",
+        "vehicles.write",
+        "permits.read",
+        "permits.write",
+        "faces.read",
+        "faces.enroll",
+        "faces.verify",
+        "plates.detect",
+    ],
+    "SECURITY": [
+        "sessions.read",
+        "history.read",
+        "iot.gates.read",
+        "iot.gates.open",
+        "iot.gates.deny",
+        "plates.detect",
+        "faces.verify",
+        "faces.compare",
+        "faces.liveness_check",
+    ],
+    "AUDITOR": [
+        "dashboard.read",
+        "history.read",
         "audit.read",
+        "sessions.read",
+        "payments.read",
     ],
 }
 
@@ -80,7 +89,7 @@ class AuthService:
 
     def issue_token(self, payload: LoginRequest) -> TokenResponse:
         user = self.repository.get_user(payload.username)
-        if user is None or user["password"] != payload.password:
+        if user is None or not self.repository.verify_password(user, payload.password):
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         permissions = self._permissions_for_roles(user["roles"])
@@ -104,19 +113,124 @@ class AuthService:
             roles=user["roles"],
             permissions=permissions,
             university_id=user["university_id"],
+            user=self._to_authenticated_user(user, permissions),
         )
 
     def current_user(self, payload: dict) -> CurrentUserResponse:
+        user = self.repository.get_user(payload["username"])
+        permissions = payload.get("permissions", [])
+        if user is None:
+            return CurrentUserResponse(
+                sub=payload["sub"],
+                id=payload["sub"],
+                username=payload["username"],
+                full_name=payload["username"],
+                email=None,
+                role=(payload.get("roles") or ["UNKNOWN"])[0],
+                roles=payload.get("roles", []),
+                permissions=permissions,
+                university_id=payload.get("university_id"),
+                status="ACTIVE",
+            )
         return CurrentUserResponse(
             sub=payload["sub"],
-            username=payload["username"],
-            roles=payload.get("roles", []),
-            permissions=payload.get("permissions", []),
-            university_id=payload.get("university_id"),
+            **self._to_authenticated_user(user, permissions).model_dump(),
         )
+
+    def list_universities(self, actor: dict) -> UniversityListResponse:
+        actor_role = self._primary_role(actor.get("roles", []))
+        items = self.repository.list_universities(
+            actor_role=actor_role,
+            actor_university_id=actor.get("university_id"),
+        )
+        return UniversityListResponse(
+            total=len(items),
+            items=[self._to_university_response(item) for item in items],
+        )
+
+    def create_university(self, actor: dict, payload: UniversityCreateRequest) -> UniversityResponse:
+        actor_role = self._primary_role(actor.get("roles", []))
+        if actor_role != "SUPER_ADMIN":
+            raise HTTPException(status_code=403, detail="Only SUPER_ADMIN can create universities")
+        try:
+            record = self.repository.create_university(payload.model_dump())
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return self._to_university_response(record)
+
+    def list_users(self, actor: dict, university_id: str | None = None, role: str | None = None) -> UserListResponse:
+        actor_role = self._primary_role(actor.get("roles", []))
+        items = self.repository.list_users(
+            actor_role=actor_role,
+            actor_university_id=actor.get("university_id"),
+            university_id=university_id,
+            role=role,
+        )
+        return UserListResponse(
+            total=len(items),
+            items=[self._to_user_response(item) for item in items],
+        )
+
+    def create_user(self, actor: dict, payload: UserCreateRequest) -> UserResponse:
+        actor_role = self._primary_role(actor.get("roles", []))
+        target_role = payload.role.strip().upper()
+        if actor_role == "UNIVERSITY_ADMIN" and target_role not in {"CASHIER", "MEMBER_MANAGER", "SECURITY", "AUDITOR"}:
+            raise HTTPException(status_code=403, detail="UNIVERSITY_ADMIN can only create internal university roles")
+        try:
+            record = self.repository.create_user(
+                payload.model_dump(),
+                actor_role=actor_role,
+                actor_university_id=actor.get("university_id"),
+            )
+        except ValueError as exc:
+            detail = str(exc)
+            status_code = 404 if "not found" in detail.lower() else 409
+            raise HTTPException(status_code=status_code, detail=detail) from exc
+        return self._to_user_response(record)
 
     def _permissions_for_roles(self, roles: list[str]) -> list[str]:
         permissions: set[str] = set()
         for role in roles:
             permissions.update(ROLE_PERMISSIONS.get(role, []))
         return sorted(permissions)
+
+    @staticmethod
+    def _primary_role(roles: list[str]) -> str:
+        return roles[0] if roles else "UNKNOWN"
+
+    def _to_authenticated_user(self, user: dict, permissions: list[str]) -> AuthenticatedUserResponse:
+        return AuthenticatedUserResponse(
+            id=user["id"],
+            username=user["username"],
+            full_name=user["full_name"],
+            email=user.get("email"),
+            role=user["role"],
+            roles=user["roles"],
+            university_id=user.get("university_id"),
+            permissions=permissions,
+            status=user.get("status", "ACTIVE"),
+        )
+
+    @staticmethod
+    def _to_university_response(record: dict) -> UniversityResponse:
+        return UniversityResponse(
+            id=record["id"],
+            name=record["name"],
+            code=record["code"],
+            city=record["city"],
+            status=record["status"],
+            created_at=record["created_at"].isoformat(),
+        )
+
+    @staticmethod
+    def _to_user_response(record: dict) -> UserResponse:
+        return UserResponse(
+            id=record["id"],
+            username=record["username"],
+            full_name=record["full_name"],
+            email=record.get("email"),
+            role=record["role"],
+            university_id=record.get("university_id"),
+            status=record.get("status", "ACTIVE"),
+            created_at=record["created_at"].isoformat(),
+        )
