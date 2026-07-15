@@ -1,14 +1,14 @@
 import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../config/debug_flags.dart';
 import '../models/app_models.dart';
 import '../services/api_client.dart';
 import '../services/image_preparation_service.dart';
 import '../state/parking_app_scope.dart';
+import 'face_camera_capture_screen.dart';
 import 'plate_camera_capture_screen.dart';
 import 'result_screen.dart';
 
@@ -25,11 +25,13 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
   static const String _pendingPlatePlaceholder = 'TMP000';
 
   final ApiClient _apiClient = ApiClient();
-  final ImagePreparationService _imagePreparationService = const ImagePreparationService();
+  final ImagePreparationService _imagePreparationService =
+      const ImagePreparationService();
   final ImagePicker _picker = ImagePicker();
   final TextEditingController _plateController = TextEditingController();
   final TextEditingController _manualPlateController = TextEditingController();
-  final TextEditingController _overrideReasonController = TextEditingController();
+  final TextEditingController _overrideReasonController =
+      TextEditingController();
 
   PersonType _personType = PersonType.visitor;
   bool _faceValid = true;
@@ -53,8 +55,11 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
 
   bool get _supportsMultiGallery => !kIsWeb;
 
-  bool get _isSecurityOperator => ParkingAppScope.of(context).isSecurityOperator;
+  bool get _isSecurityOperator =>
+      ParkingAppScope.of(context).isSecurityOperator;
   bool get _useRealFaceFlow => _faceConfig?.usesRealOrHybrid ?? false;
+  bool get _hasFaceEvidenceReady =>
+      _faceEvidence != null || _uploadedFaceEvidence != null;
 
   bool get _usingManualOverride {
     if (!_isSecurityOperator) {
@@ -64,8 +69,11 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     return manual.isNotEmpty && manual != (_plateDetection?.plateText ?? '');
   }
 
-  String get _normalizedManualPlate =>
-      _manualPlateController.text.trim().toUpperCase().replaceAll(' ', '').replaceAll('-', '');
+  String get _normalizedManualPlate => _manualPlateController.text
+      .trim()
+      .toUpperCase()
+      .replaceAll(' ', '')
+      .replaceAll('-', '');
 
   bool get _hasValidDetectedPlate => _plateDetection?.autoAccepted ?? false;
 
@@ -74,7 +82,8 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
       _normalizedManualPlate.length >= 6 &&
       _overrideReasonController.text.trim().isNotEmpty;
 
-  bool get _canSubmitWithPlate => _hasValidDetectedPlate || _hasManualOverrideReady;
+  bool get _canSubmitWithPlate =>
+      _hasValidDetectedPlate || _hasManualOverrideReady;
 
   String get _effectivePlateText {
     if (_usingManualOverride) {
@@ -83,7 +92,8 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     return _plateDetection?.plateText ?? '';
   }
 
-  double get _effectivePlateConfidence => _usingManualOverride ? 1.0 : (_plateDetection?.confidence ?? 0.0);
+  double get _effectivePlateConfidence =>
+      _usingManualOverride ? 1.0 : (_plateDetection?.confidence ?? 0.0);
 
   EvidenceUploadResult? get _selectedPlateEvidence {
     if (_uploadedPlateEvidences.isEmpty) {
@@ -140,16 +150,30 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
   }
 
   Future<void> _submit() async {
-    final selection = ParkingAppScope.of(context).selection;
+    final appScope = ParkingAppScope.of(context);
+    final session = appScope.session;
+    final selection = appScope.selection;
     if (selection == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Completa la seleccion de universidad, campus y puerta.')),
+        const SnackBar(
+            content:
+                Text('Completa la seleccion de universidad, campus y puerta.')),
       );
       return;
     }
     if (!_canSubmitWithPlate) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Debes detectar una placa valida antes de registrar la entrada.')),
+        const SnackBar(
+            content: Text(
+                'Debes detectar una placa valida antes de registrar la entrada.')),
+      );
+      return;
+    }
+    if (!_hasFaceEvidenceReady) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Debes capturar el rostro antes de registrar la entrada.')),
       );
       return;
     }
@@ -166,7 +190,6 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
         throw Exception('No hay evidencia de placa cargada.');
       }
 
-      final session = ParkingAppScope.of(context).session;
       final result = await _apiClient.submitEntry(
         universityId: selection.universityId,
         campusId: selection.campusId,
@@ -178,14 +201,18 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
         operatorUsername: session?.username,
         plateDetectedText: _plateDetection?.plateText,
         plateDetectionConfidence: _plateDetection?.confidence,
-        plateOverrideReason: _usingManualOverride ? _overrideReasonController.text.trim() : null,
-        livenessScore: _livenessValid ? 0.95 : 0.30,
+        plateOverrideReason:
+            _usingManualOverride ? _overrideReasonController.text.trim() : null,
+        livenessScore:
+            showDebugControls ? (_livenessValid ? 0.95 : 0.30) : 0.95,
         personType: _personType,
         confidencePlate: _effectivePlateConfidence,
-        confidenceFace: _useRealFaceFlow ? 0.95 : (_faceValid ? _faceConfidence : 0.35),
+        confidenceFace: showDebugControls && !_useRealFaceFlow
+            ? (_faceValid ? _faceConfidence : 0.35)
+            : 0.95,
       );
       if (!mounted) return;
-      ParkingAppScope.of(context).addHistory(
+      appScope.addHistory(
         HistoryItem(
           mode: ModeType.entry,
           plateText: effectivePlate,
@@ -193,11 +220,13 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
           plateDetection: _plateDetection,
         ),
       );
-      Navigator.of(context).pushNamed(ResultScreen.routeName, arguments: result);
+      Navigator.of(context)
+          .pushNamed(ResultScreen.routeName, arguments: result);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', ''))),
       );
     } finally {
       if (mounted) {
@@ -206,13 +235,19 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     }
   }
 
-  Future<void> _pickEvidence({required bool isFace, required ImageSource source}) async {
+  Future<void> _pickEvidence(
+      {required bool isFace, required ImageSource source}) async {
     if (!isFace) {
       if (source == ImageSource.camera) {
         await _capturePlateWithEmbeddedCamera();
         return;
       }
       await _collectPlateEvidences(source: source);
+      return;
+    }
+
+    if (source == ImageSource.camera) {
+      await _captureFaceWithEmbeddedCamera();
       return;
     }
 
@@ -226,10 +261,48 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
         label: source == ImageSource.camera ? 'Capturada' : 'Seleccionada',
       );
       _setEvidenceDraft(isFace: true, draft: draft);
+      await _uploadCapturedFaceEvidence();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo obtener la imagen.')),
+      );
+    }
+  }
+
+  Future<void> _captureFaceWithEmbeddedCamera() async {
+    if (!_canSubmitWithPlate) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Primero captura una placa valida antes de tomar el rostro.')),
+      );
+      return;
+    }
+
+    try {
+      final capturedFile = await Navigator.of(context).push<XFile>(
+        MaterialPageRoute<XFile>(
+          builder: (_) => const FaceCameraCaptureScreen(),
+        ),
+      );
+
+      if (capturedFile == null) {
+        return;
+      }
+
+      final draft = await _imagePreparationService.buildDraft(
+        file: capturedFile,
+        label: 'Rostro capturado',
+      );
+      _setEvidenceDraft(isFace: true, draft: draft);
+      await _uploadCapturedFaceEvidence();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'La captura interna de rostro fallo. Intenta nuevamente.')),
       );
     }
   }
@@ -260,7 +333,8 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
       if (drafts.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudieron procesar las capturas de placa.')),
+          const SnackBar(
+              content: Text('No se pudieron procesar las capturas de placa.')),
         );
         return;
       }
@@ -270,7 +344,9 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La captura interna de placa fallo. Intenta nuevamente.')),
+        const SnackBar(
+            content:
+                Text('La captura interna de placa fallo. Intenta nuevamente.')),
       );
     }
   }
@@ -279,7 +355,8 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     if (!isFace) {
       final drafts = List<LocalEvidenceDraft>.generate(
         3,
-        (index) => _buildDefaultMockEvidence(isFace: false, suffix: '-${index + 1}'),
+        (index) =>
+            _buildDefaultMockEvidence(isFace: false, suffix: '-${index + 1}'),
       );
       _setPlateEvidenceDrafts(drafts);
       await _uploadAndDetectPlateBatch();
@@ -290,7 +367,8 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     _setEvidenceDraft(isFace: isFace, draft: draft);
   }
 
-  void _setEvidenceDraft({required bool isFace, required LocalEvidenceDraft draft}) {
+  void _setEvidenceDraft(
+      {required bool isFace, required LocalEvidenceDraft draft}) {
     setState(() {
       if (isFace) {
         _faceEvidence = draft;
@@ -321,7 +399,11 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     }
 
     final normalizedPlate = plate.trim().toUpperCase();
-    final draft = _faceEvidence ?? _buildDefaultMockEvidence(isFace: true);
+    final draft = _faceEvidence ??
+        (showDebugControls ? _buildDefaultMockEvidence(isFace: true) : null);
+    if (draft == null) {
+      throw Exception('Captura el rostro antes de continuar.');
+    }
 
     setState(() => _uploadingFaceEvidence = true);
     try {
@@ -344,6 +426,50 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     }
   }
 
+  Future<void> _uploadCapturedFaceEvidence() async {
+    final draft = _faceEvidence;
+    if (draft == null) {
+      return;
+    }
+
+    final plate = _effectivePlateText;
+    if (plate.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Primero detecta una placa valida antes de subir el rostro.')),
+      );
+      return;
+    }
+
+    setState(() => _uploadingFaceEvidence = true);
+    try {
+      final result = await _apiClient.uploadEvidence(
+        imageType: EvidenceImageType.faceEntry,
+        plate: plate,
+        evidence: draft,
+      );
+      if (!mounted) return;
+      setState(() => _uploadedFaceEvidence = result);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Rostro capturado y cargado correctamente.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _uploadedFaceEvidence = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _uploadingFaceEvidence = false);
+      }
+    }
+  }
+
   Future<void> _collectPlateEvidences({required ImageSource source}) async {
     try {
       final drafts = <LocalEvidenceDraft>[];
@@ -353,18 +479,22 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
           return;
         }
         for (final file in files.take(3)) {
-          drafts.add(await _imagePreparationService.buildDraft(file: file, label: 'Seleccionada'));
+          drafts.add(await _imagePreparationService.buildDraft(
+              file: file, label: 'Seleccionada'));
         }
       } else {
         for (var index = 0; index < 3; index++) {
-          final file = await _picker.pickImage(source: source, imageQuality: 85);
+          final file =
+              await _picker.pickImage(source: source, imageQuality: 85);
           if (file == null) {
             break;
           }
           drafts.add(
             await _imagePreparationService.buildDraft(
               file: file,
-              label: source == ImageSource.camera ? 'Capturada ${index + 1}' : 'Seleccionada ${index + 1}',
+              label: source == ImageSource.camera
+                  ? 'Capturada ${index + 1}'
+                  : 'Seleccionada ${index + 1}',
             ),
           );
         }
@@ -379,7 +509,8 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudieron obtener las capturas de placa.')),
+        const SnackBar(
+            content: Text('No se pudieron obtener las capturas de placa.')),
       );
     }
   }
@@ -389,12 +520,19 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     if (selection == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona universidad, campus y puerta antes de capturar la placa.')),
+        const SnackBar(
+            content: Text(
+                'Selecciona universidad, campus y puerta antes de capturar la placa.')),
       );
       return;
     }
 
-    final drafts = _plateEvidences.isNotEmpty ? _plateEvidences : List<LocalEvidenceDraft>.generate(3, (index) => _buildDefaultMockEvidence(isFace: false, suffix: '-${index + 1}'));
+    final drafts = _plateEvidences.isNotEmpty
+        ? _plateEvidences
+        : List<LocalEvidenceDraft>.generate(
+            3,
+            (index) => _buildDefaultMockEvidence(
+                isFace: false, suffix: '-${index + 1}'));
     setState(() => _processingPlateEvidence = true);
     try {
       final uploads = <EvidenceUploadResult>[];
@@ -424,11 +562,14 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
       });
       if (batchDetection.inconsistent) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Resultado inconsistente entre capturas.')),
+          const SnackBar(
+              content: Text('Resultado inconsistente entre capturas.')),
         );
       } else if (!detection.autoAccepted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('La deteccion de placa no tiene confianza suficiente.')),
+          const SnackBar(
+              content:
+                  Text('La deteccion de placa no tiene confianza suficiente.')),
         );
       }
     } catch (error) {
@@ -440,7 +581,8 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
         _plateController.clear();
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', ''))),
       );
     } finally {
       if (mounted) {
@@ -449,8 +591,13 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     }
   }
 
-  LocalEvidenceDraft _buildDefaultMockEvidence({required bool isFace, String suffix = ''}) {
-    final mockPlate = isFace ? (_effectivePlateText.isEmpty ? _recommendedMockPlate() : _effectivePlateText) : _recommendedMockPlate();
+  LocalEvidenceDraft _buildDefaultMockEvidence(
+      {required bool isFace, String suffix = ''}) {
+    final mockPlate = isFace
+        ? (_effectivePlateText.isEmpty
+            ? _recommendedMockPlate()
+            : _effectivePlateText)
+        : _recommendedMockPlate();
     final slot = isFace ? 'face-entry' : 'plate-entry';
     return LocalEvidenceDraft(
       label: isFace ? 'Mock automatico rostro' : 'Mock automatico placa',
@@ -477,17 +624,13 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
     return switch (_personType) {
       PersonType.student => 'face-student-001',
       PersonType.teacher => 'face-teacher-001',
-      PersonType.employee => plate == 'EXP2026' ? 'face-expired-001' : 'face-employee-001',
+      PersonType.employee =>
+        plate == 'EXP2026' ? 'face-expired-001' : 'face-employee-001',
       PersonType.visitor => 'face-entry-$plate',
     };
   }
 
   Widget _buildFaceEvidenceCard() {
-    final helperText = _useRealFaceFlow
-        ? (_faceConfig?.usingFallback ?? false)
-            ? 'Modo hybrid activo. Si el proveedor facial real no carga, el backend usara un fallback preparado sin romper el flujo.'
-            : 'Modo ${_faceConfig?.faceServiceMode ?? 'hybrid'} activo. Se requiere una imagen real de rostro.'
-        : 'Puedes usar captura real o mock para la demostracion.';
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -497,33 +640,55 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Evidencia de rostro', style: Theme.of(context).textTheme.titleSmall),
+          Text('Evidencia de rostro',
+              style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
-          Text(helperText),
-          const SizedBox(height: 8),
-          Text(_faceEvidence == null ? 'Sin evidencia seleccionada.' : '${_faceEvidence!.label} - ${_faceEvidence!.fileName}'),
+          Text(_faceEvidence == null
+              ? 'Sin rostro capturado.'
+              : 'Rostro capturado.'),
           if (_uploadedFaceEvidence != null) ...[
             const SizedBox(height: 4),
-            Text('Bucket: ${_uploadedFaceEvidence!.bucket}'),
-            Text('Image ID: ${_uploadedFaceEvidence!.imageId}'),
+            const Text('Evidencia facial lista para validacion.'),
+            if (showDebugControls)
+              Text('Image ID: ${_uploadedFaceEvidence!.imageId}'),
+          ],
+          if (_uploadingFaceEvidence) ...[
+            const SizedBox(height: 12),
+            const Row(
+              children: [
+                SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2)),
+                SizedBox(width: 12),
+                Text('Subiendo rostro...'),
+              ],
+            ),
           ],
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              OutlinedButton.icon(
-                onPressed: () => _pickEvidence(isFace: true, source: ImageSource.gallery),
-                icon: const Icon(Icons.photo_library_outlined),
-                label: const Text('Seleccionar'),
-              ),
               if (_supportsCameraCapture)
-                OutlinedButton.icon(
-                  onPressed: () => _pickEvidence(isFace: true, source: ImageSource.camera),
+                FilledButton.icon(
+                  onPressed: _uploadingFaceEvidence || _submitting
+                      ? null
+                      : () => _pickEvidence(
+                          isFace: true, source: ImageSource.camera),
                   icon: const Icon(Icons.photo_camera_outlined),
-                  label: const Text('Capturar'),
+                  label: const Text('Capturar rostro'),
                 ),
-              if (!_useRealFaceFlow)
+              if (showDebugControls)
+                OutlinedButton.icon(
+                  onPressed: _uploadingFaceEvidence || _submitting
+                      ? null
+                      : () => _pickEvidence(
+                          isFace: true, source: ImageSource.gallery),
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: const Text('Seleccionar'),
+                ),
+              if (showDebugControls && !_useRealFaceFlow)
                 OutlinedButton.icon(
                   onPressed: () => _useMockEvidence(isFace: true),
                   icon: const Icon(Icons.auto_fix_high_outlined),
@@ -546,7 +711,8 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Captura y deteccion de placa', style: Theme.of(context).textTheme.titleSmall),
+          Text('Captura y deteccion de placa',
+              style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
@@ -601,29 +767,41 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              OutlinedButton.icon(
-                onPressed: _processingPlateEvidence ? null : () => _pickEvidence(isFace: false, source: ImageSource.gallery),
-                icon: const Icon(Icons.photo_library_outlined),
-                label: const Text('Seleccionar 3 imagenes'),
-              ),
               if (_supportsCameraCapture)
                 FilledButton.icon(
-                  onPressed: _processingPlateEvidence ? null : () => _pickEvidence(isFace: false, source: ImageSource.camera),
+                  onPressed: _processingPlateEvidence
+                      ? null
+                      : () => _pickEvidence(
+                          isFace: false, source: ImageSource.camera),
                   icon: const Icon(Icons.photo_camera_outlined),
                   label: const Text('Capturar placa'),
                 ),
-              OutlinedButton.icon(
-                onPressed: _processingPlateEvidence ? null : () => _useMockEvidence(isFace: false),
-                icon: const Icon(Icons.auto_fix_high_outlined),
-                label: const Text('Usar mock'),
-              ),
+              if (showDebugControls)
+                OutlinedButton.icon(
+                  onPressed: _processingPlateEvidence
+                      ? null
+                      : () => _pickEvidence(
+                          isFace: false, source: ImageSource.gallery),
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: const Text('Seleccionar 3 imagenes'),
+                ),
+              if (showDebugControls)
+                OutlinedButton.icon(
+                  onPressed: _processingPlateEvidence
+                      ? null
+                      : () => _useMockEvidence(isFace: false),
+                  icon: const Icon(Icons.auto_fix_high_outlined),
+                  label: const Text('Usar mock'),
+                ),
               if (_plateEvidences.isNotEmpty)
                 OutlinedButton.icon(
                   onPressed: _processingPlateEvidence
                       ? null
                       : () => _pickEvidence(
                             isFace: false,
-                            source: _supportsCameraCapture ? ImageSource.camera : ImageSource.gallery,
+                            source: _supportsCameraCapture
+                                ? ImageSource.camera
+                                : ImageSource.gallery,
                           ),
                   icon: const Icon(Icons.refresh),
                   label: const Text('Reintentar captura'),
@@ -634,7 +812,10 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
           if (_processingPlateEvidence)
             const Row(
               children: [
-                SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2)),
                 SizedBox(width: 12),
                 Text('Detectando placa...'),
               ],
@@ -652,21 +833,30 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _plateDetection!.autoAccepted ? Colors.green.withOpacity(0.08) : Colors.orange.withOpacity(0.08),
-                border: Border.all(color: _plateDetection!.autoAccepted ? Colors.green : Colors.orange),
+                color: _plateDetection!.autoAccepted
+                    ? Colors.green.withOpacity(0.08)
+                    : Colors.orange.withOpacity(0.08),
+                border: Border.all(
+                    color: _plateDetection!.autoAccepted
+                        ? Colors.green
+                        : Colors.orange),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Estado: ${_plateDetection!.status}'),
-                  Text('Placa detectada: ${_plateDetection!.plateText ?? 'Sin lectura valida'}'),
-                  Text('Confianza: ${(_plateDetection!.confidence * 100).toStringAsFixed(0)}%'),
-                  Text('Proveedor detector: ${_plateDetection!.detectorProvider}'),
+                  Text(
+                      'Placa detectada: ${_plateDetection!.plateText ?? 'Sin lectura valida'}'),
+                  Text(
+                      'Confianza: ${(_plateDetection!.confidence * 100).toStringAsFixed(0)}%'),
+                  Text(
+                      'Proveedor detector: ${_plateDetection!.detectorProvider}'),
                   Text('Proveedor OCR: ${_plateDetection!.ocrProvider}'),
                   if (_plateBatchDetection != null) ...[
                     const SizedBox(height: 8),
-                    Text('Resultados por captura:', style: Theme.of(context).textTheme.titleSmall),
+                    Text('Resultados por captura:',
+                        style: Theme.of(context).textTheme.titleSmall),
                     const SizedBox(height: 4),
                     ..._plateBatchDetection!.results.map(
                       (result) => Text(
@@ -676,13 +866,16 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
                   ],
                   if (_plateDetection!.warnings.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    Text('Advertencias:', style: Theme.of(context).textTheme.titleSmall),
+                    Text('Advertencias:',
+                        style: Theme.of(context).textTheme.titleSmall),
                     const SizedBox(height: 4),
-                    ..._plateDetection!.warnings.map((warning) => Text('- $warning')),
+                    ..._plateDetection!.warnings
+                        .map((warning) => Text('- $warning')),
                   ],
                   if (_plateDetection!.candidates.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    Text('Candidatos:', style: Theme.of(context).textTheme.titleSmall),
+                    Text('Candidatos:',
+                        style: Theme.of(context).textTheme.titleSmall),
                     const SizedBox(height: 4),
                     ..._plateDetection!.candidates.map(
                       (candidate) => Text(
@@ -694,7 +887,8 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
               ),
             ),
           ] else
-            const Text('Captura la placa para iniciar la deteccion automatica.'),
+            const Text(
+                'Captura la placa para iniciar la deteccion automatica.'),
           if (_isSecurityOperator) ...[
             const SizedBox(height: 16),
             TextField(
@@ -704,7 +898,10 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
                 labelText: 'Correccion manual de placa (solo seguridad)',
                 border: OutlineInputBorder(),
               ),
-              onChanged: (_) => setState(() => _plateController.text = _usingManualOverride ? _normalizedManualPlate : (_plateDetection?.plateText ?? '')),
+              onChanged: (_) => setState(() => _plateController.text =
+                  _usingManualOverride
+                      ? _normalizedManualPlate
+                      : (_plateDetection?.plateText ?? '')),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -731,67 +928,62 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
         children: [
           DropdownButtonFormField<PersonType>(
             value: _personType,
-            decoration: const InputDecoration(labelText: 'Tipo de persona', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+                labelText: 'Tipo de persona', border: OutlineInputBorder()),
             items: PersonType.values
-                .map((type) => DropdownMenuItem(value: type, child: Text(type.label)))
+                .map((type) =>
+                    DropdownMenuItem(value: type, child: Text(type.label)))
                 .toList(),
-            onChanged: (value) => setState(() => _personType = value ?? PersonType.visitor),
+            onChanged: (value) =>
+                setState(() => _personType = value ?? PersonType.visitor),
           ),
           const SizedBox(height: 16),
           _buildPlateDetectionCard(),
           const SizedBox(height: 16),
           _buildFaceEvidenceCard(),
-          const SizedBox(height: 12),
-          if (_useRealFaceFlow)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.teal.withOpacity(0.06),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.teal.withOpacity(0.35)),
+          if (showDebugControls) ...[
+            const SizedBox(height: 12),
+            if (!_useRealFaceFlow)
+              SwitchListTile(
+                value: _faceValid,
+                title: const Text('Simulador de rostro valido'),
+                subtitle: Text(_faceValid
+                    ? 'La validacion facial pasara.'
+                    : 'La validacion facial fallara.'),
+                onChanged: (value) => setState(() => _faceValid = value),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Reconocimiento facial activo'),
-                  const SizedBox(height: 4),
-                  Text('Modo: ${_faceConfig?.faceServiceMode ?? 'hybrid'}'),
-                  Text('Proveedor: ${_faceConfig?.activeProvider ?? 'insightface'}'),
-                  Text('Dimensiones embedding: ${_faceConfig?.embeddingDimensions ?? 0}'),
-                  Text(
-                    (_faceConfig?.usingFallback ?? false)
-                        ? 'Estado runtime: fallback preparado'
-                        : 'Estado runtime: proveedor listo',
-                  ),
-                  if ((_faceConfig?.modelError ?? '').isNotEmpty)
-                    Text('Detalle: ${_faceConfig!.modelError!}'),
-                ],
-              ),
-            )
-          else
+            const SizedBox(height: 12),
             SwitchListTile(
-              value: _faceValid,
-              title: const Text('Simulador de rostro valido'),
-              subtitle: Text(_faceValid ? 'La validacion facial pasara.' : 'La validacion facial fallara.'),
-              onChanged: (value) => setState(() => _faceValid = value),
+              value: _livenessValid,
+              title: const Text('Simulador de liveness valido'),
+              subtitle: Text(_livenessValid
+                  ? 'El liveness pasara.'
+                  : 'El liveness sera bloqueado.'),
+              onChanged: (value) => setState(() => _livenessValid = value),
             ),
-          const SizedBox(height: 12),
-          SwitchListTile(
-            value: _livenessValid,
-            title: const Text('Simulador de liveness valido'),
-            subtitle: Text(_livenessValid ? 'El liveness pasara.' : 'El liveness sera bloqueado.'),
-            onChanged: (value) => setState(() => _livenessValid = value),
-          ),
-          if (!_useRealFaceFlow) ...[
-            const SizedBox(height: 20),
-            Text('Confianza rostro: ${_faceConfidence.toStringAsFixed(2)}'),
-            Slider(value: _faceConfidence, onChanged: (value) => setState(() => _faceConfidence = value)),
+            if (!_useRealFaceFlow) ...[
+              const SizedBox(height: 20),
+              Text('Confianza rostro: ${_faceConfidence.toStringAsFixed(2)}'),
+              Slider(
+                  value: _faceConfidence,
+                  onChanged: (value) =>
+                      setState(() => _faceConfidence = value)),
+            ],
           ],
           const SizedBox(height: 24),
           FilledButton(
-            onPressed: (_submitting || !_canSubmitWithPlate || _processingPlateEvidence) ? null : _submit,
+            onPressed: (_submitting ||
+                    !_canSubmitWithPlate ||
+                    !_hasFaceEvidenceReady ||
+                    _processingPlateEvidence ||
+                    _uploadingFaceEvidence)
+                ? null
+                : _submit,
             child: _submitting
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
                 : const Text('Registrar entrada'),
           ),
         ],
