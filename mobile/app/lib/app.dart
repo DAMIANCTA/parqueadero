@@ -10,6 +10,7 @@ import 'screens/result_screen.dart';
 import 'screens/setup_screen.dart';
 import 'state/parking_app_scope.dart';
 import 'state/parking_app_state.dart';
+import 'theme/ucepark_theme.dart';
 
 class SmartParkingApp extends StatefulWidget {
   const SmartParkingApp({super.key});
@@ -26,12 +27,9 @@ class _SmartParkingAppState extends State<SmartParkingApp> {
     return ParkingAppScope(
       notifier: _appState,
       child: MaterialApp(
-        title: 'Smart Parking University',
+        title: 'UCEPark',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0F766E)),
-          useMaterial3: true,
-        ),
+        theme: UceParkTheme.build(),
         initialRoute: LoginScreen.routeName,
         routes: {
           LoginScreen.routeName: (_) => const LoginScreen(),

@@ -7,10 +7,12 @@ class PlateCameraCaptureScreen extends StatefulWidget {
   const PlateCameraCaptureScreen({super.key});
 
   @override
-  State<PlateCameraCaptureScreen> createState() => _PlateCameraCaptureScreenState();
+  State<PlateCameraCaptureScreen> createState() =>
+      _PlateCameraCaptureScreenState();
 }
 
-class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen> with WidgetsBindingObserver {
+class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen>
+    with WidgetsBindingObserver {
   CameraController? _controller;
   bool _loading = true;
   bool _ready = false;
@@ -39,7 +41,8 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen> wit
       return;
     }
 
-    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
       _disposeController();
       if (mounted) {
         setState(() {
@@ -75,7 +78,8 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen> wit
     try {
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
-        throw CameraException('camera-not-found', 'No se encontro una camara disponible.');
+        throw CameraException(
+            'camera-not-found', 'No se encontro una camara disponible.');
       }
 
       final selectedCamera = cameras.firstWhere(
@@ -118,7 +122,8 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen> wit
       setState(() {
         _loading = false;
         _ready = false;
-        _cameraError = 'No se pudo iniciar la camara. Verifica permisos e intenta de nuevo.';
+        _cameraError =
+            'No se pudo iniciar la camara. Verifica permisos e intenta de nuevo.';
       });
     }
   }
@@ -169,7 +174,8 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen> wit
     } on CameraException catch (error) {
       if (!mounted) return;
       setState(() {
-        _cameraError = 'Fallo la captura de placa: ${error.description ?? error.code}.';
+        _cameraError =
+            'Fallo la captura de placa: ${error.description ?? error.code}.';
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_cameraError!)),
@@ -177,10 +183,13 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen> wit
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _cameraError = 'No se pudieron capturar las 3 fotos. Intenta nuevamente.';
+        _cameraError =
+            'No se pudieron capturar las 3 fotos. Intenta nuevamente.';
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudieron capturar las 3 fotos. Intenta nuevamente.')),
+        const SnackBar(
+            content: Text(
+                'No se pudieron capturar las 3 fotos. Intenta nuevamente.')),
       );
     } finally {
       if (mounted) {
@@ -202,8 +211,6 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen> wit
       backgroundColor: Colors.black,
       appBar: AppBar(
         title: const Text('Capturar placa'),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
       ),
       body: SafeArea(
         child: Stack(
@@ -244,7 +251,8 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen> wit
                     _capturing
                         ? 'Capturando placa...'
                         : 'La app tomara 3 fotos seguidas automaticamente.',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: Colors.white70),
                     textAlign: TextAlign.center,
                   ),
                   const Spacer(),
@@ -253,10 +261,14 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen> wit
                       width: 280,
                       height: 120,
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.tealAccent, width: 3),
+                        border: Border.all(
+                            color: const Color(0xFF7A1F2E), width: 3),
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: const [
-                          BoxShadow(color: Color(0x5500BFA5), blurRadius: 18, spreadRadius: 2),
+                          BoxShadow(
+                              color: Color(0x557A1F2E),
+                              blurRadius: 18,
+                              spreadRadius: 2),
                         ],
                       ),
                     ),
@@ -264,14 +276,17 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen> wit
                   const SizedBox(height: 16),
                   Center(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
                         color: Colors.black.withOpacity(0.45),
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(color: Colors.white24),
                       ),
                       child: Text(
-                        _capturing ? 'Foto $_currentShot/3' : 'Listo para capturar 3 fotos',
+                        _capturing
+                            ? 'Foto $_currentShot/3'
+                            : 'Listo para capturar 3 fotos',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
@@ -282,7 +297,8 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen> wit
                   const Spacer(),
                   if (_loading)
                     const Center(
-                      child: CircularProgressIndicator(color: Colors.tealAccent),
+                      child:
+                          CircularProgressIndicator(color: Colors.tealAccent),
                     )
                   else if (_cameraError != null)
                     Container(
@@ -312,7 +328,7 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen> wit
                     FilledButton.icon(
                       onPressed: _capturing ? null : _captureThreePhotos,
                       style: FilledButton.styleFrom(
-                        backgroundColor: Colors.teal,
+                        backgroundColor: const Color(0xFF15294D),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
@@ -320,10 +336,12 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen> wit
                           ? const SizedBox(
                               height: 18,
                               width: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
                             )
                           : const Icon(Icons.photo_camera),
-                      label: Text(_capturing ? 'Capturando placa...' : 'Tomar 3 fotos'),
+                      label: Text(
+                          _capturing ? 'Capturando placa...' : 'Tomar 3 fotos'),
                     ),
                 ],
               ),

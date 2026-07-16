@@ -188,8 +188,6 @@ class _FaceCameraCaptureScreenState extends State<FaceCameraCaptureScreen>
       backgroundColor: Colors.black,
       appBar: AppBar(
         title: const Text('Capturar rostro'),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
       ),
       body: SafeArea(
         child: Stack(
@@ -240,11 +238,12 @@ class _FaceCameraCaptureScreenState extends State<FaceCameraCaptureScreen>
                       width: 240,
                       height: 320,
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.tealAccent, width: 3),
+                        border: Border.all(
+                            color: const Color(0xFF5B4B8A), width: 3),
                         borderRadius: BorderRadius.circular(999),
                         boxShadow: const [
                           BoxShadow(
-                              color: Color(0x5500BFA5),
+                              color: Color(0x555B4B8A),
                               blurRadius: 18,
                               spreadRadius: 2),
                         ],
@@ -285,7 +284,7 @@ class _FaceCameraCaptureScreenState extends State<FaceCameraCaptureScreen>
                     FilledButton.icon(
                       onPressed: _capturing ? null : _captureFace,
                       style: FilledButton.styleFrom(
-                        backgroundColor: Colors.teal,
+                        backgroundColor: const Color(0xFF15294D),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),

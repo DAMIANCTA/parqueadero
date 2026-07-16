@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../models/app_models.dart';
 import '../services/api_client.dart';
+import '../theme/ucepark_theme.dart';
+import '../widgets/ucepark_brand_header.dart';
 
 class DemoIotScreen extends StatefulWidget {
   const DemoIotScreen({super.key});
@@ -44,73 +46,84 @@ class _DemoIotScreenState extends State<DemoIotScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Demo IoT')),
-      body: Padding(
+      body: ListView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
+        children: [
+          const UceParkBrandHeader(
+            compact: true,
+            subtitle: 'Control institucional de barrera y mensajería MQTT',
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('Escenario demo', style: TextStyle(fontWeight: FontWeight.w700)),
-                  SizedBox(height: 8),
-                  Text('Universidad: uce'),
-                  Text('Campus: matriz'),
-                  Text('Puerta: norte'),
-                  Text('Placa: ABC1234'),
+                  Text('Escenario demo',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  const Text('Universidad: uce'),
+                  const Text('Campus: matriz'),
+                  const Text('Puerta: norte'),
+                  const Text('Placa: ABC1234'),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: _loading ? null : _openDemoGate,
+                    icon: const Icon(Icons.sensors),
+                    label: _loading
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Abrir barrera demo'),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      _error!,
+                      style:
+                          TextStyle(color: Theme.of(context).colorScheme.error),
+                    ),
+                  ],
+                  if (_result != null) ...[
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: _result!.published
+                            ? UceParkColors.success.withValues(alpha: 0.08)
+                            : UceParkColors.danger.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _result!.published
+                              ? UceParkColors.success
+                              : UceParkColors.danger,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_result!.status,
+                              style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 8),
+                          Text(_result!.message),
+                          const SizedBox(height: 12),
+                          Text('Evento: ${_result!.demoEventId}'),
+                          Text('Tópico cmd: ${_result!.topic}'),
+                          Text('Tópico status: ${_result!.statusTopic}'),
+                          Text(
+                              'Publicado: ${_result!.published ? 'sí' : 'no'}'),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: _loading ? null : _openDemoGate,
-              icon: const Icon(Icons.sensors),
-              label: _loading
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Abrir barrera demo'),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
-            if (_result != null) ...[
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: _result!.published ? Colors.green.shade50 : Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_result!.status, style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 8),
-                    Text(_result!.message),
-                    const SizedBox(height: 12),
-                    Text('Evento: ${_result!.demoEventId}'),
-                    Text('Topico cmd: ${_result!.topic}'),
-                    Text('Topico status: ${_result!.statusTopic}'),
-                    Text('Publicado: ${_result!.published ? 'si' : 'no'}'),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

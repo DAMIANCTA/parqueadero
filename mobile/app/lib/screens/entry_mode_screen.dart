@@ -8,6 +8,7 @@ import '../models/app_models.dart';
 import '../services/api_client.dart';
 import '../services/image_preparation_service.dart';
 import '../state/parking_app_scope.dart';
+import '../widgets/ucepark_brand_header.dart';
 import 'face_camera_capture_screen.dart';
 import 'plate_camera_capture_screen.dart';
 import 'result_screen.dart';
@@ -926,6 +927,11 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const UceParkBrandHeader(
+            compact: true,
+            subtitle: 'Registro institucional de ingreso vehicular',
+          ),
+          const SizedBox(height: 16),
           DropdownButtonFormField<PersonType>(
             value: _personType,
             decoration: const InputDecoration(

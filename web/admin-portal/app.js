@@ -830,8 +830,18 @@ function buildSidebar() {
 
   return el("aside", { className: "sidebar" }, [
     el("div", { className: "brand" }, [
-      el("h1", { text: "Smart Parking University" }),
-      el("p", { text: "Portal unificado para administracion y caja del parqueadero." }),
+      el("div", { className: "brand-lockup" }, [
+        el("img", {
+          className: "brand-mark",
+          src: "/admin-portal/assets/ucepark_logo.png",
+          alt: "Logo UCEPark",
+        }),
+        el("div", {}, [
+          el("h1", { text: "UCEPark" }),
+          el("p", { text: "Universidad Central del Ecuador" }),
+        ]),
+      ]),
+      el("p", { text: "Portal unificado para administración, caja y monitoreo del parqueadero." }),
     ]),
     el("div", { className: "sidebar-user" }, [
       el("strong", { text: state.auth.user?.full_name || state.auth.username || "Portal" }),
@@ -854,8 +864,18 @@ function buildSidebar() {
 function buildLoginView() {
   return el("div", { className: "login-shell" }, [
     el("section", { className: "login-card" }, [
-      el("h1", { text: "Smart Parking University" }),
-      el("p", { className: "helper", text: "Inicia sesion para acceder al portal administrativo multiuniversidad." }),
+      el("div", { className: "login-brand" }, [
+        el("img", {
+          className: "brand-mark brand-mark-large",
+          src: "/admin-portal/assets/ucepark_logo.png",
+          alt: "Logo UCEPark",
+        }),
+        el("div", {}, [
+          el("h1", { text: "UCEPark" }),
+          el("p", { className: "helper", text: "Universidad Central del Ecuador" }),
+        ]),
+      ]),
+      el("p", { className: "helper", text: "Inicia sesión para acceder al portal administrativo multiuniversidad." }),
       buildLoginForm(),
       state.cashierMessage ? el("p", { className: "helper", text: state.cashierMessage }) : null,
     ].filter(Boolean)),
@@ -1147,10 +1167,10 @@ function buildUsersSection() {
         ? table(
             ["Usuario", "Nombre", "Rol", "Universidad", "Estado"],
             state.users.map((item) => [
-              item.username,
+              identityCell(item.username, item.email || item.full_name, ["Usuario interno"]),
               item.full_name,
-              statusPill(item.role),
-              universityNameById(item.university_id),
+              rolePill(item.role),
+              universitySummaryCell(universityNameById(item.university_id), item.university_id),
               statusPill(item.status),
             ]),
           )
@@ -1174,7 +1194,7 @@ function buildUniversitiesSection() {
         ? table(
             ["Codigo", "Nombre", "Ciudad", "Estado"],
             state.universities.map((item) => [
-              item.code,
+              identityCell(item.code, item.name, ["Universidad"]),
               item.name,
               item.city,
               statusPill(item.status),
@@ -1200,8 +1220,8 @@ function buildMembersSection() {
         ? table(
             ["Nombre", "Rol", "Documento", "Correo", "Estado"],
             state.members.map((item) => [
-              item.full_name,
-              statusPill(item.role_type),
+              identityCell(item.full_name, item.institutional_id || item.document_id, [statusText(item.status)]),
+              rolePill(item.role_type),
               item.document_id,
               item.email,
               statusPill(item.status),
@@ -1232,7 +1252,7 @@ function buildVehiclesSection() {
         ? table(
             ["Placa", "Marca", "Modelo", "Color", "Estado"],
             state.vehicles.map((item) => [
-              item.plate_text,
+              identityCell(item.plate_text, `${item.brand || "-"} ${item.model || ""}`.trim(), [item.color || "Sin color"]),
               item.brand,
               item.model,
               item.color,
@@ -1259,11 +1279,11 @@ function buildFacesSection() {
         ? table(
             ["Miembro", "Image ID", "Template", "Provider", "Estado"],
             state.faceProfiles.map((item) => [
-              memberNameById(item.person_id),
-              item.face_image_id,
-              item.template_id,
-              item.provider,
-              statusPill(item.status),
+              identityCell(memberNameById(item.person_id), item.face_image_id, ["Biometría"]),
+              truncateMiddle(item.face_image_id),
+              truncateMiddle(item.template_id),
+              statusPill(item.provider || "FACE", { tone: "biometric", label: providerLabel(item.provider) }),
+              biometricStatusCell(item.status, item.quality_score),
             ]),
           )
         : el("p", { className: "empty-state", text: "No hay rostros registrados o falta autenticacion." }),
@@ -1286,7 +1306,7 @@ function buildPermitsSection() {
         ? table(
             ["Miembro", "Placa", "Inicio", "Fin", "Monto", "Estado"],
             state.permits.map((item) => [
-              memberNameById(item.person_id),
+              identityCell(memberNameById(item.person_id), vehiclePlateById(item.vehicle_id), ["Permiso mensual"]),
               vehiclePlateById(item.vehicle_id),
               formatDateTime(item.start_date),
               formatDateTime(item.end_date),
@@ -1621,7 +1641,7 @@ function table(headers, rows) {
       ),
     );
   });
-  return el("table", {}, [head, body]);
+  return el("div", { className: "table-shell" }, [el("table", {}, [head, body])]);
 }
 
 function field(label, control) {
@@ -1641,10 +1661,120 @@ function helperText(text) {
 }
 
 function statusPill(status) {
+  return statusPillWithOptions(status, {});
+}
+
+function statusPillWithOptions(status, options = {}) {
+  const text = options.label || status || "-";
+  const tone = options.tone ? ` ${options.tone}` : "";
   return el("span", {
-    className: `status-pill ${String(status || "neutral").toLowerCase()}`,
-    text: status || "-",
+    className: `status-pill ${statusSlug(status || "neutral")}${tone}`,
+    text,
   });
+}
+
+function rolePill(role) {
+  return statusPillWithOptions(role, { tone: "role", label: roleLabel(role) });
+}
+
+function identityCell(title, subtitle, tags = []) {
+  return el("div", { className: "cell-stack" }, [
+    el("strong", { className: "cell-title", text: title || "-" }),
+    subtitle ? el("span", { className: "cell-meta", text: subtitle }) : null,
+    tags.length
+      ? el(
+          "div",
+          { className: "cell-tags" },
+          tags.filter(Boolean).map((tag) => el("span", { className: "mini-tag", text: tag })),
+        )
+      : null,
+  ]);
+}
+
+function universitySummaryCell(name, id) {
+  return identityCell(name || "-", id ? truncateMiddle(id) : "", ["Multiuniversidad"]);
+}
+
+function biometricStatusCell(status, qualityScore) {
+  const items = [statusPillWithOptions(status, { tone: "biometric", label: statusText(status) })];
+  if (qualityScore != null && qualityScore !== "") {
+    items.push(el("span", { className: "mini-tag biometric", text: `Calidad ${(Number(qualityScore) * 100).toFixed(0)}%` }));
+  }
+  return el("div", { className: "cell-inline" }, items);
+}
+
+function providerLabel(provider) {
+  const value = String(provider || "").toLowerCase();
+  if (!value) return "Biometría";
+  if (value === "face_recognition") return "Face Recognition";
+  if (value === "insightface") return "InsightFace";
+  return String(provider).toUpperCase();
+}
+
+function roleLabel(role) {
+  switch (String(role || "").toUpperCase()) {
+    case "STUDENT":
+      return "Estudiante";
+    case "TEACHER":
+      return "Profesor";
+    case "STAFF":
+    case "EMPLOYEE":
+      return "Personal";
+    case "UNIVERSITY_ADMIN":
+      return "Admin universidad";
+    case "MEMBER_MANAGER":
+      return "Gestor miembros";
+    case "SUPER_ADMIN":
+      return "Superadmin";
+    case "CASHIER":
+      return "Caja";
+    case "SECURITY":
+      return "Seguridad";
+    case "AUDITOR":
+      return "Auditor";
+    default:
+      return role || "-";
+  }
+}
+
+function statusText(status) {
+  switch (String(status || "").toUpperCase()) {
+    case "ACTIVE":
+      return "Activo";
+    case "INACTIVE":
+      return "Inactivo";
+    case "VALID":
+      return "Vigente";
+    case "EXPIRED":
+      return "Vencido";
+    case "PAID":
+      return "Pagado";
+    case "PENDING":
+      return "Pendiente";
+    case "AUTHORIZED":
+      return "Autorizado";
+    case "REJECTED":
+      return "Denegado";
+    case "NOT_REQUIRED":
+      return "No requerido";
+    default:
+      return status || "-";
+  }
+}
+
+function statusSlug(value) {
+  return String(value || "neutral")
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function truncateMiddle(value, max = 20) {
+  const text = String(value || "");
+  if (text.length <= max) return text || "-";
+  const head = Math.ceil((max - 3) / 2);
+  const tail = Math.floor((max - 3) / 2);
+  return `${text.slice(0, head)}...${text.slice(-tail)}`;
 }
 
 function input(type, name, value, onInput, placeholder = "", disabled = false, extra = {}) {

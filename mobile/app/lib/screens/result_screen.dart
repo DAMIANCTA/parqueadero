@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_models.dart';
+import '../theme/ucepark_theme.dart';
+import '../widgets/ucepark_brand_header.dart';
 
 class ResultScreen extends StatelessWidget {
   const ResultScreen({super.key});
@@ -9,7 +11,8 @@ class ResultScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final result = ModalRoute.of(context)!.settings.arguments as AuthorizationResult;
+    final result =
+        ModalRoute.of(context)!.settings.arguments as AuthorizationResult;
     final session = result.session;
     final isMember = session?.isMember ?? false;
     final face = result.faceValidation;
@@ -19,13 +22,22 @@ class ResultScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const UceParkBrandHeader(
+            compact: true,
+            subtitle: 'Resultado de validación de acceso',
+          ),
+          const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: result.authorized ? Colors.green.shade50 : Colors.red.shade50,
-              borderRadius: BorderRadius.circular(8),
+              color: result.authorized
+                  ? UceParkColors.success.withValues(alpha: 0.08)
+                  : UceParkColors.danger.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: result.authorized ? Colors.green.shade200 : Colors.red.shade200,
+                color: result.authorized
+                    ? UceParkColors.success
+                    : UceParkColors.danger,
               ),
             ),
             child: Column(
@@ -36,7 +48,9 @@ class ResultScreen extends StatelessWidget {
                     Icon(
                       result.authorized ? Icons.verified : Icons.error_outline,
                       size: 40,
-                      color: result.authorized ? Colors.green.shade700 : Colors.red.shade700,
+                      color: result.authorized
+                          ? UceParkColors.success
+                          : UceParkColors.danger,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -49,7 +63,8 @@ class ResultScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            _headlineDescription(result: result, isMember: isMember),
+                            _headlineDescription(
+                                result: result, isMember: isMember),
                             style: Theme.of(context).textTheme.bodyLarge,
                           ),
                         ],
@@ -67,12 +82,13 @@ class ResultScreen extends StatelessWidget {
           const SizedBox(height: 20),
           if (session != null) ...[
             _SectionCard(
-              title: 'Sesion',
+              title: 'Sesión',
               children: [
                 _infoRow('ID', session.sessionId),
                 _infoRow('Placa', session.plateText),
                 _infoRow('Estado', session.sessionStatus),
-                _infoRow('Acceso', session.accessType ?? (isMember ? 'MEMBER' : 'VISITOR')),
+                _infoRow('Acceso',
+                    session.accessType ?? (isMember ? 'MEMBER' : 'VISITOR')),
                 _infoRow('Pago', session.paymentStatus),
                 if (isMember) ...[
                   _infoRow('Nombre', session.personName ?? '-'),
@@ -85,20 +101,29 @@ class ResultScreen extends StatelessWidget {
           ],
           if (face != null) ...[
             _SectionCard(
-              title: 'Validacion facial',
+              title: 'Validación facial',
               children: [
-                _infoRow('Rostro detectado', face.detected ? 'Si' : 'No'),
+                _infoRow('Rostro detectado', face.detected ? 'Sí' : 'No'),
                 _infoRow('Face', face.matchLabel),
-                if (face.similarity != null) _infoRow('Similarity', '${(face.similarity! * 100).toStringAsFixed(1)}%'),
-                if (face.distance != null) _infoRow('Distance', face.distance!.toStringAsFixed(4)),
-                if (face.threshold != null) _infoRow('Threshold', face.thresholdValueLabel),
+                if (face.similarity != null)
+                  _infoRow('Similarity',
+                      '${(face.similarity! * 100).toStringAsFixed(1)}%'),
+                if (face.distance != null)
+                  _infoRow('Distance', face.distance!.toStringAsFixed(4)),
+                if (face.threshold != null)
+                  _infoRow('Threshold', face.thresholdValueLabel),
                 _infoRow('Proveedor', face.provider),
-                if ((face.modelName ?? '').isNotEmpty) _infoRow('Modelo', face.modelName!),
+                if ((face.modelName ?? '').isNotEmpty)
+                  _infoRow('Modelo', face.modelName!),
                 if (face.qualityScore != null)
-                  _infoRow('Calidad', '${(face.qualityScore! * 100).toStringAsFixed(1)}%'),
-                if (face.embeddingSize > 0) _infoRow('Embedding', '${face.embeddingSize} dimensiones'),
-                if (face.boundingBox != null) _infoRow('Bounding box', face.boundingBox.toString()),
-                if (face.warnings.isNotEmpty) _infoRow('Advertencias', face.warnings.join(', ')),
+                  _infoRow('Calidad',
+                      '${(face.qualityScore! * 100).toStringAsFixed(1)}%'),
+                if (face.embeddingSize > 0)
+                  _infoRow('Embedding', '${face.embeddingSize} dimensiones'),
+                if (face.boundingBox != null)
+                  _infoRow('Bounding box', face.boundingBox.toString()),
+                if (face.warnings.isNotEmpty)
+                  _infoRow('Advertencias', face.warnings.join(', ')),
               ],
             ),
             const SizedBox(height: 16),
@@ -108,7 +133,8 @@ class ResultScreen extends StatelessWidget {
             children: [
               _infoRow('Access event', result.accessEventId),
               _infoRow('Audit log', result.auditLogId),
-              if (result.incidentId != null) _infoRow('Incidente', result.incidentId!),
+              if (result.incidentId != null)
+                _infoRow('Incidente', result.incidentId!),
               if (result.gateId != null) _infoRow('Puerta', result.gateId!),
             ],
           ),
@@ -141,7 +167,8 @@ class ResultScreen extends StatelessWidget {
     if (normalized.contains('face verification failed')) {
       return 'Face verification failed. El rostro no coincide con el registro esperado.';
     }
-    if (normalized == 'monthly permit expired' || normalized == 'permission is not valid') {
+    if (normalized == 'monthly permit expired' ||
+        normalized == 'permission is not valid') {
       return 'Permiso mensual vencido.';
     }
     return message;
@@ -194,9 +221,9 @@ class _SectionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.black12),
+        color: UceParkColors.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: UceParkColors.borderSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_models.dart';
+import '../widgets/ucepark_brand_header.dart';
 import '../state/parking_app_scope.dart';
 import 'mode_hub_screen.dart';
 
@@ -47,42 +48,69 @@ class _SetupScreenState extends State<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Seleccion de acceso')),
-      body: Padding(
+      appBar: AppBar(title: const Text('Selección de acceso')),
+      body: ListView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            DropdownButtonFormField<String>(
-              value: _universityId,
-              decoration: const InputDecoration(labelText: 'Universidad', border: OutlineInputBorder()),
-              items: universities.entries
-                  .map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value)))
-                  .toList(),
-              onChanged: (value) => setState(() => _universityId = value!),
+        children: [
+          const UceParkBrandHeader(
+            compact: true,
+            subtitle: 'Configuración inicial de universidad, campus y puerta',
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Configura el punto de operación',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'El dispositivo móvil quedará asociado a esta universidad, campus y garita.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 20),
+                  DropdownButtonFormField<String>(
+                    initialValue: _universityId,
+                    decoration: const InputDecoration(labelText: 'Universidad'),
+                    items: universities.entries
+                        .map((entry) => DropdownMenuItem(
+                            value: entry.key, child: Text(entry.value)))
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => _universityId = value!),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: _campusId,
+                    decoration: const InputDecoration(labelText: 'Campus'),
+                    items: campuses.entries
+                        .map((entry) => DropdownMenuItem(
+                            value: entry.key, child: Text(entry.value)))
+                        .toList(),
+                    onChanged: (value) => setState(() => _campusId = value!),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: _gateId,
+                    decoration: const InputDecoration(labelText: 'Puerta'),
+                    items: gates.entries
+                        .map((entry) => DropdownMenuItem(
+                            value: entry.key, child: Text(entry.value)))
+                        .toList(),
+                    onChanged: (value) => setState(() => _gateId = value!),
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                      onPressed: _continue, child: const Text('Continuar')),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _campusId,
-              decoration: const InputDecoration(labelText: 'Campus', border: OutlineInputBorder()),
-              items: campuses.entries
-                  .map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value)))
-                  .toList(),
-              onChanged: (value) => setState(() => _campusId = value!),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _gateId,
-              decoration: const InputDecoration(labelText: 'Puerta', border: OutlineInputBorder()),
-              items: gates.entries
-                  .map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value)))
-                  .toList(),
-              onChanged: (value) => setState(() => _gateId = value!),
-            ),
-            const Spacer(),
-            FilledButton(onPressed: _continue, child: const Text('Continuar')),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

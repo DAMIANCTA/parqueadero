@@ -8,6 +8,8 @@ import '../models/app_models.dart';
 import '../services/api_client.dart';
 import '../services/image_preparation_service.dart';
 import '../state/parking_app_scope.dart';
+import '../theme/ucepark_theme.dart';
+import '../widgets/ucepark_brand_header.dart';
 import 'face_camera_capture_screen.dart';
 import 'plate_camera_capture_screen.dart';
 import 'result_screen.dart';
@@ -971,6 +973,11 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const UceParkBrandHeader(
+            compact: true,
+            subtitle: 'Control institucional de salida vehicular',
+          ),
+          const SizedBox(height: 16),
           _buildPlateDetectionCard(),
           const SizedBox(height: 12),
           if (_showPaymentVerificationButton)
@@ -1036,17 +1043,17 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: _paymentLookup!.isMemberSession
-                    ? Colors.teal.withOpacity(0.08)
+                    ? UceParkColors.biometric.withValues(alpha: 0.08)
                     : _paymentLookup!.isPaid
-                        ? Colors.green.withOpacity(0.10)
-                        : Colors.orange.withOpacity(0.10),
+                        ? UceParkColors.success.withValues(alpha: 0.10)
+                        : UceParkColors.maroon.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: _paymentLookup!.isMemberSession
-                      ? Colors.teal
+                      ? UceParkColors.biometric
                       : _paymentLookup!.isPaid
-                          ? Colors.green
-                          : Colors.orange,
+                          ? UceParkColors.success
+                          : UceParkColors.maroon,
                 ),
               ),
               child: Column(
