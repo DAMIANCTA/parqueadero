@@ -5,11 +5,12 @@ import 'package:image_picker/image_picker.dart';
 
 import '../config/debug_flags.dart';
 import '../models/app_models.dart';
+import '../models/history_entry.dart';
 import '../services/api_client.dart';
 import '../services/image_preparation_service.dart';
 import '../state/parking_app_scope.dart';
 import '../theme/ucepark_theme.dart';
-import '../widgets/ucepark_brand_header.dart';
+import '../widgets/uce_widgets.dart';
 import 'face_camera_capture_screen.dart';
 import 'plate_camera_capture_screen.dart';
 import 'result_screen.dart';
@@ -217,11 +218,12 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
       );
       if (!mounted) return;
       appScope.addHistory(
-        HistoryItem(
+        HistoryEntry.fromResult(
           mode: ModeType.exit,
           plateText: effectivePlate,
           result: result,
           plateDetection: _plateDetection,
+          faceImageId: faceEvidence.imageId,
         ),
       );
       Navigator.of(context)
@@ -694,12 +696,8 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
   }
 
   Widget _buildFaceEvidenceCard() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.black12),
-        borderRadius: BorderRadius.circular(8),
-      ),
+    return UceCard(
+      padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -765,12 +763,8 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
   }
 
   Widget _buildPlateDetectionCard() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.black12),
-        borderRadius: BorderRadius.circular(8),
-      ),
+    return UceCard(
+      padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -985,153 +979,161 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Modo salida')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const UceParkBrandHeader(
-            compact: true,
-            subtitle: 'Control institucional de salida vehicular',
-          ),
-          const SizedBox(height: 16),
-          _buildPlateDetectionCard(),
-          const SizedBox(height: 12),
-          if (_showPaymentVerificationButton)
-            OutlinedButton.icon(
-              onPressed: _canSubmitWithPlate ? _verifyPayment : null,
-              icon: const Icon(Icons.payments),
-              label: const Text('Verificar pago'),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
+          children: [
+            const UceTopBar(showBack: true),
+            const SizedBox(height: 14),
+            Text(
+              'Modo salida',
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-          if (_hasMemberSession) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.teal.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.teal.withOpacity(0.35)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Sesion MEMBER detectada'),
-                  const SizedBox(height: 4),
-                  Text('Placa: ${_paymentLookup!.plateText}'),
-                  Text('Pago: ${_paymentLookup!.paymentStatus}'),
-                  if ((_paymentLookup!.personName ?? '').isNotEmpty)
-                    Text('Nombre: ${_paymentLookup!.personName}'),
-                  if ((_paymentLookup!.roleType ?? '').isNotEmpty)
-                    Text('Rol: ${_paymentLookup!.roleLabel}'),
-                  Text(
-                    (_paymentLookup!.permitStatus ?? '').isNotEmpty
-                        ? 'Permiso: ${_paymentLookup!.permitStatus}'
-                        : 'Permiso: se validara en backend con placa + rostro.',
-                  ),
-                ],
-              ),
+            const Text(
+              'Control institucional de salida vehicular',
+              style: TextStyle(fontSize: 13.5, color: UceParkColors.muted),
             ),
-          ],
-          const SizedBox(height: 16),
-          _buildFaceEvidenceCard(),
-          if (showDebugControls) ...[
+            const SizedBox(height: 16),
+            _buildPlateDetectionCard(),
             const SizedBox(height: 12),
-            if (!_useRealFaceFlow)
-              SwitchListTile(
-                value: _faceValid,
-                title: const Text('Simulador de rostro valido'),
-                subtitle: Text(_faceValid
-                    ? 'El rostro coincidira.'
-                    : 'El rostro sera rechazado.'),
-                onChanged: (value) => setState(() => _faceValid = value),
+            if (_showPaymentVerificationButton)
+              OutlinedButton.icon(
+                onPressed: _canSubmitWithPlate ? _verifyPayment : null,
+                icon: const Icon(Icons.payments),
+                label: const Text('Verificar pago'),
               ),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              value: _livenessValid,
-              title: const Text('Simulador de liveness valido'),
-              subtitle: Text(_livenessValid
-                  ? 'El liveness pasara.'
-                  : 'El liveness sera bloqueado.'),
-              onChanged: (value) => setState(() => _livenessValid = value),
-            ),
-          ],
-          if (_paymentLookup != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _paymentLookup!.isMemberSession
-                    ? UceParkColors.biometric.withValues(alpha: 0.08)
-                    : _paymentLookup!.isPaid
-                        ? UceParkColors.success.withValues(alpha: 0.10)
-                        : UceParkColors.maroon.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: _paymentLookup!.isMemberSession
-                      ? UceParkColors.biometric
-                      : _paymentLookup!.isPaid
-                          ? UceParkColors.success
-                          : UceParkColors.maroon,
+            if (_hasMemberSession) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.teal.withOpacity(0.35)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Sesion MEMBER detectada'),
+                    const SizedBox(height: 4),
+                    Text('Placa: ${_paymentLookup!.plateText}'),
+                    Text('Pago: ${_paymentLookup!.paymentStatus}'),
+                    if ((_paymentLookup!.personName ?? '').isNotEmpty)
+                      Text('Nombre: ${_paymentLookup!.personName}'),
+                    if ((_paymentLookup!.roleType ?? '').isNotEmpty)
+                      Text('Rol: ${_paymentLookup!.roleLabel}'),
+                    Text(
+                      (_paymentLookup!.permitStatus ?? '').isNotEmpty
+                          ? 'Permiso: ${_paymentLookup!.permitStatus}'
+                          : 'Permiso: se validara en backend con placa + rostro.',
+                    ),
+                  ],
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_paymentLookup!.message),
-                  if (_paymentLookup!.found) ...[
-                    Text('Estado de pago: ${_paymentLookup!.paymentStatus}'),
-                    Text('Placa: ${_paymentLookup!.plateText}'),
-                    Text('Entrada: ${_paymentLookup!.entryTime.toLocal()}'),
-                    if (_paymentLookup!.isMemberSession) ...[
-                      const Text('Acceso: MEMBER'),
-                      Text(
-                        (_paymentLookup!.permitStatus ?? '').isNotEmpty
-                            ? 'Permiso: ${_paymentLookup!.permitStatus}'
-                            : 'Permiso: se validara en la autorizacion de salida.',
-                      ),
-                      const Text('Pago: NOT_REQUIRED'),
-                    ] else ...[
-                      Text(
-                          'Tiempo estacionado: ${_paymentLookup!.durationMinutes} min'),
-                      Text(
-                        _paymentLookup!.isPaid
-                            ? 'Monto pagado: ${_paymentLookup!.currency} ${(_paymentLookup!.paidAmount ?? _paymentLookup!.amount).toStringAsFixed(2)}'
-                            : 'Monto calculado: ${_paymentLookup!.currency} ${_paymentLookup!.amount.toStringAsFixed(2)}',
-                      ),
-                      if (_paymentLookup!.paidAt != null)
+            ],
+            const SizedBox(height: 16),
+            _buildFaceEvidenceCard(),
+            if (showDebugControls) ...[
+              const SizedBox(height: 12),
+              if (!_useRealFaceFlow)
+                SwitchListTile(
+                  value: _faceValid,
+                  title: const Text('Simulador de rostro valido'),
+                  subtitle: Text(_faceValid
+                      ? 'El rostro coincidira.'
+                      : 'El rostro sera rechazado.'),
+                  onChanged: (value) => setState(() => _faceValid = value),
+                ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                value: _livenessValid,
+                title: const Text('Simulador de liveness valido'),
+                subtitle: Text(_livenessValid
+                    ? 'El liveness pasara.'
+                    : 'El liveness sera bloqueado.'),
+                onChanged: (value) => setState(() => _livenessValid = value),
+              ),
+            ],
+            if (_paymentLookup != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _paymentLookup!.isMemberSession
+                      ? UceParkColors.biometric.withValues(alpha: 0.08)
+                      : _paymentLookup!.isPaid
+                          ? UceParkColors.success.withValues(alpha: 0.10)
+                          : UceParkColors.maroon.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _paymentLookup!.isMemberSession
+                        ? UceParkColors.biometric
+                        : _paymentLookup!.isPaid
+                            ? UceParkColors.success
+                            : UceParkColors.maroon,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_paymentLookup!.message),
+                    if (_paymentLookup!.found) ...[
+                      Text('Estado de pago: ${_paymentLookup!.paymentStatus}'),
+                      Text('Placa: ${_paymentLookup!.plateText}'),
+                      Text('Entrada: ${_paymentLookup!.entryTime.toLocal()}'),
+                      if (_paymentLookup!.isMemberSession) ...[
+                        const Text('Acceso: MEMBER'),
                         Text(
-                            'Hora de pago: ${_paymentLookup!.paidAt!.toLocal()}'),
-                      if (_paymentLookup!.paymentValidUntil != null)
+                          (_paymentLookup!.permitStatus ?? '').isNotEmpty
+                              ? 'Permiso: ${_paymentLookup!.permitStatus}'
+                              : 'Permiso: se validara en la autorizacion de salida.',
+                        ),
+                        const Text('Pago: NOT_REQUIRED'),
+                      ] else ...[
                         Text(
-                            'Valido hasta: ${_paymentLookup!.paymentValidUntil!.toLocal()}'),
+                            'Tiempo estacionado: ${_paymentLookup!.durationMinutes} min'),
+                        Text(
+                          _paymentLookup!.isPaid
+                              ? 'Monto pagado: ${_paymentLookup!.currency} ${(_paymentLookup!.paidAmount ?? _paymentLookup!.amount).toStringAsFixed(2)}'
+                              : 'Monto calculado: ${_paymentLookup!.currency} ${_paymentLookup!.amount.toStringAsFixed(2)}',
+                        ),
+                        if (_paymentLookup!.paidAt != null)
+                          Text(
+                              'Hora de pago: ${_paymentLookup!.paidAt!.toLocal()}'),
+                        if (_paymentLookup!.paymentValidUntil != null)
+                          Text(
+                              'Valido hasta: ${_paymentLookup!.paymentValidUntil!.toLocal()}'),
+                      ],
                     ],
                   ],
-                ],
+                ),
               ),
+            ],
+            if (showDebugControls && !_useRealFaceFlow) ...[
+              const SizedBox(height: 20),
+              Text('Confianza rostro: ${_faceConfidence.toStringAsFixed(2)}'),
+              Slider(
+                  value: _faceConfidence,
+                  onChanged: (value) =>
+                      setState(() => _faceConfidence = value)),
+            ],
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: (_submitting ||
+                      !_canSubmitWithPlate ||
+                      !_hasFaceEvidenceReady ||
+                      _processingPlateEvidence ||
+                      _uploadingFaceEvidence)
+                  ? null
+                  : _submit,
+              child: _submitting
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Validar salida'),
             ),
           ],
-          if (showDebugControls && !_useRealFaceFlow) ...[
-            const SizedBox(height: 20),
-            Text('Confianza rostro: ${_faceConfidence.toStringAsFixed(2)}'),
-            Slider(
-                value: _faceConfidence,
-                onChanged: (value) => setState(() => _faceConfidence = value)),
-          ],
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: (_submitting ||
-                    !_canSubmitWithPlate ||
-                    !_hasFaceEvidenceReady ||
-                    _processingPlateEvidence ||
-                    _uploadingFaceEvidence)
-                ? null
-                : _submit,
-            child: _submitting
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Validar salida'),
-          ),
-        ],
+        ),
       ),
     );
   }

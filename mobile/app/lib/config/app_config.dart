@@ -55,4 +55,17 @@ class AppConfig {
   static void setMqttPort(int value) {
     _runtimeMqttPort = value;
   }
+
+  static String? _authToken;
+
+  /// Token JWT obtenido de /auth/login. Solo lo necesitan las llamadas que
+  /// piden datos administrativos protegidos (ej. fotos de evidencia); el
+  /// resto del flujo operativo de la garita (entry/exit/plates/evidence
+  /// upload) es publico a proposito, ver public_paths en api-gateway/main.py.
+  static String? get authToken => _authToken;
+
+  static void setAuthToken(String? value) {
+    final normalized = value?.trim() ?? '';
+    _authToken = normalized.isEmpty ? null : normalized;
+  }
 }

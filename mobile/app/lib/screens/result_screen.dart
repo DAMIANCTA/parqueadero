@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_models.dart';
-import '../theme/ucepark_theme.dart';
-import '../widgets/ucepark_brand_header.dart';
+import '../widgets/uce_widgets.dart';
 
 class ResultScreen extends StatelessWidget {
   const ResultScreen({super.key});
@@ -18,132 +17,97 @@ class ResultScreen extends StatelessWidget {
     final face = result.faceValidation;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Resultado')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const UceParkBrandHeader(
-            compact: true,
-            subtitle: 'Resultado de validación de acceso',
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: result.authorized
-                  ? UceParkColors.success.withValues(alpha: 0.08)
-                  : UceParkColors.danger.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: result.authorized
-                    ? UceParkColors.success
-                    : UceParkColors.danger,
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
+          children: [
+            const UceTopBar(showBack: true),
+            const SizedBox(height: 14),
+            UceHero(
+              authorized: result.authorized,
+              title: result.authorized ? 'Acceso Permitido' : 'Acceso Denegado',
+              description:
+                  _headlineDescription(result: result, isMember: isMember),
+              detailChip: _localizedMessage(result.message),
+            ),
+            const SizedBox(height: 10),
+            UceCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Estado backend',
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 4),
+                  Text(result.status),
+                ],
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      result.authorized ? Icons.verified : Icons.error_outline,
-                      size: 40,
-                      color: result.authorized
-                          ? UceParkColors.success
-                          : UceParkColors.danger,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            result.authorized ? 'AUTHORIZED' : 'REJECTED',
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _headlineDescription(
-                                result: result, isMember: isMember),
-                            style: Theme.of(context).textTheme.bodyLarge,
-                          ),
-                        ],
-                      ),
-                    ),
+            const SizedBox(height: 16),
+            if (session != null) ...[
+              _SectionCard(
+                title: 'Sesión',
+                children: [
+                  _infoRow('ID', session.sessionId),
+                  _infoRow('Placa', session.plateText),
+                  _infoRow('Estado', session.sessionStatus),
+                  _infoRow('Acceso',
+                      session.accessType ?? (isMember ? 'MEMBER' : 'VISITOR')),
+                  _infoRow('Pago', session.paymentStatus),
+                  if (isMember) ...[
+                    _infoRow('Nombre', session.personName ?? '-'),
+                    _infoRow('Rol', session.roleLabel),
+                    _infoRow('Permiso', _permitLabel(session.permitStatus)),
                   ],
-                ),
-                const SizedBox(height: 12),
-                Text(_localizedMessage(result.message)),
-                const SizedBox(height: 8),
-                Text('Backend status: ${result.status}'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (session != null) ...[
-            _SectionCard(
-              title: 'Sesión',
-              children: [
-                _infoRow('ID', session.sessionId),
-                _infoRow('Placa', session.plateText),
-                _infoRow('Estado', session.sessionStatus),
-                _infoRow('Acceso',
-                    session.accessType ?? (isMember ? 'MEMBER' : 'VISITOR')),
-                _infoRow('Pago', session.paymentStatus),
-                if (isMember) ...[
-                  _infoRow('Nombre', session.personName ?? '-'),
-                  _infoRow('Rol', session.roleLabel),
-                  _infoRow('Permiso', _permitLabel(session.permitStatus)),
                 ],
-              ],
-            ),
-            const SizedBox(height: 16),
-          ],
-          if (face != null) ...[
-            _SectionCard(
-              title: 'Validación facial',
-              children: [
-                _infoRow('Rostro detectado', face.detected ? 'Sí' : 'No'),
-                _infoRow('Face', face.matchLabel),
-                if (face.similarity != null)
-                  _infoRow('Similarity',
-                      '${(face.similarity! * 100).toStringAsFixed(1)}%'),
-                if (face.distance != null)
-                  _infoRow('Distance', face.distance!.toStringAsFixed(4)),
-                if (face.threshold != null)
-                  _infoRow('Threshold', face.thresholdValueLabel),
-                _infoRow('Proveedor', face.provider),
-                if ((face.modelName ?? '').isNotEmpty)
-                  _infoRow('Modelo', face.modelName!),
-                if (face.qualityScore != null)
-                  _infoRow('Calidad',
-                      '${(face.qualityScore! * 100).toStringAsFixed(1)}%'),
-                if (face.embeddingSize > 0)
-                  _infoRow('Embedding', '${face.embeddingSize} dimensiones'),
-                if (face.boundingBox != null)
-                  _infoRow('Bounding box', face.boundingBox.toString()),
-                if (face.warnings.isNotEmpty)
-                  _infoRow('Advertencias', face.warnings.join(', ')),
-              ],
-            ),
-            const SizedBox(height: 16),
-          ],
-          _SectionCard(
-            title: 'Trazabilidad',
-            children: [
-              _infoRow('Access event', result.accessEventId),
-              _infoRow('Audit log', result.auditLogId),
-              if (result.incidentId != null)
-                _infoRow('Incidente', result.incidentId!),
-              if (result.gateId != null) _infoRow('Puerta', result.gateId!),
+              ),
+              const SizedBox(height: 16),
             ],
-          ),
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Volver'),
-          ),
-        ],
+            if (face != null) ...[
+              _SectionCard(
+                title: 'Validación facial',
+                children: [
+                  _infoRow('Rostro detectado', face.detected ? 'Sí' : 'No'),
+                  _infoRow('Face', face.matchLabel),
+                  if (face.similarity != null)
+                    _infoRow('Similarity',
+                        '${(face.similarity! * 100).toStringAsFixed(1)}%'),
+                  if (face.distance != null)
+                    _infoRow('Distance', face.distance!.toStringAsFixed(4)),
+                  if (face.threshold != null)
+                    _infoRow('Threshold', face.thresholdValueLabel),
+                  _infoRow('Proveedor', face.provider),
+                  if ((face.modelName ?? '').isNotEmpty)
+                    _infoRow('Modelo', face.modelName!),
+                  if (face.qualityScore != null)
+                    _infoRow('Calidad',
+                        '${(face.qualityScore! * 100).toStringAsFixed(1)}%'),
+                  if (face.embeddingSize > 0)
+                    _infoRow('Embedding', '${face.embeddingSize} dimensiones'),
+                  if (face.boundingBox != null)
+                    _infoRow('Bounding box', face.boundingBox.toString()),
+                  if (face.warnings.isNotEmpty)
+                    _infoRow('Advertencias', face.warnings.join(', ')),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+            _SectionCard(
+              title: 'Trazabilidad',
+              children: [
+                _infoRow('Access event', result.accessEventId),
+                _infoRow('Audit log', result.auditLogId),
+                if (result.incidentId != null)
+                  _infoRow('Incidente', result.incidentId!),
+                if (result.gateId != null) _infoRow('Puerta', result.gateId!),
+              ],
+            ),
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Volver'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -218,13 +182,7 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: UceParkColors.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: UceParkColors.borderSoft),
-      ),
+    return UceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

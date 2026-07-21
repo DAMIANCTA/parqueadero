@@ -14,7 +14,11 @@ dependencies:
   image: ^4.2.0
   image_picker: ^1.1.2
   mqtt_client: ^10.5.1
+  shared_preferences: ^2.3.3
+  google_mlkit_face_detection: ^0.13.1
   cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  wakelock_plus: ^1.2.8
 
 dev_dependencies:
   flutter_test:
@@ -25,3 +29,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/ucepark_logo.png
+    - assets/images/logo_mark.png
+    - assets/images/logo_lockup.png

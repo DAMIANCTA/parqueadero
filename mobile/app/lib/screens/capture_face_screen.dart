@@ -36,7 +36,9 @@ class _CaptureFaceScreenState extends State<CaptureFaceScreen> {
           (camera) => camera.lensDirection == CameraLensDirection.front,
           orElse: () => cameras.first,
         );
-        final controller = CameraController(selectedCamera, ResolutionPreset.medium, enableAudio: false);
+        final controller = CameraController(
+            selectedCamera, ResolutionPreset.medium,
+            enableAudio: false);
         await controller.initialize();
         if (!mounted) return;
         setState(() {
@@ -92,7 +94,9 @@ class _CaptureFaceScreenState extends State<CaptureFaceScreen> {
         _validating = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.failureReason ?? 'La validacion de liveness no fue aprobada.')),
+        SnackBar(
+            content: Text(result.failureReason ??
+                'La validacion de liveness no fue aprobada.')),
       );
       return;
     }
@@ -119,7 +123,8 @@ class _CaptureFaceScreenState extends State<CaptureFaceScreen> {
                   controller: _controller,
                   isReady: _ready,
                   title: 'Camara no disponible',
-                  subtitle: 'Puedes simular la captura para continuar el flujo.',
+                  subtitle:
+                      'Puedes simular la captura para continuar el flujo.',
                 ),
               ),
             const SizedBox(height: 16),
@@ -162,11 +167,14 @@ class _CaptureFaceScreenState extends State<CaptureFaceScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _lastResult!.accepted ? 'Liveness aprobado' : 'Liveness rechazado',
+                      _lastResult!.accepted
+                          ? 'Liveness aprobado'
+                          : 'Liveness rechazado',
                       style: theme.textTheme.titleSmall,
                     ),
                     const SizedBox(height: 8),
-                    Text('Score: ${_lastResult!.livenessScore.toStringAsFixed(2)}'),
+                    Text(
+                        'Score: ${_lastResult!.livenessScore.toStringAsFixed(2)}'),
                     Text('Frames simulados: ${_lastResult!.frames.length}'),
                     if (_lastResult!.failureReason != null) ...[
                       const SizedBox(height: 6),
@@ -180,7 +188,8 @@ class _CaptureFaceScreenState extends State<CaptureFaceScreen> {
             FilledButton.icon(
               onPressed: _loading || _validating ? null : _capture,
               icon: const Icon(Icons.verified_user),
-              label: Text(_validating ? 'Validando reto...' : 'Iniciar validacion'),
+              label: Text(
+                  _validating ? 'Validando reto...' : 'Iniciar validacion'),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(

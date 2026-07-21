@@ -51,9 +51,12 @@ class MockLivenessProvider extends LivenessProvider {
 
   String _buildFailureReason(LivenessChallenge challenge) {
     return switch (challenge) {
-      LivenessChallenge.lookLeft => 'No se detecto el giro esperado hacia la izquierda.',
-      LivenessChallenge.lookRight => 'No se detecto el giro esperado hacia la derecha.',
-      LivenessChallenge.blink => 'No se detecto un parpadeo valido durante la captura.',
+      LivenessChallenge.lookLeft =>
+        'No se detecto el giro esperado hacia la izquierda.',
+      LivenessChallenge.lookRight =>
+        'No se detecto el giro esperado hacia la derecha.',
+      LivenessChallenge.blink =>
+        'No se detecto un parpadeo valido durante la captura.',
     };
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -11,25 +12,79 @@ class ApiClient {
   final http.Client _client;
 
   Future<bool> checkHealth() async {
-    final response = await _client.get(Uri.parse('${AppConfig.apiBaseUrl}/health'));
+    final response =
+        await _client.get(Uri.parse('${AppConfig.apiBaseUrl}/health'));
     return response.statusCode == 200;
   }
 
+  Future<LoginResult> login({
+    required String username,
+    required String password,
+  }) async {
+    final response = await _client.post(
+      Uri.parse('${AppConfig.apiBaseUrl}/auth/login'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'username': username, 'password': password}),
+    );
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode == 401) {
+      throw Exception('Usuario o contraseña incorrectos.');
+    }
+    if (response.statusCode >= 400) {
+      throw Exception(body['detail'] ?? 'No se pudo iniciar sesión.');
+    }
+
+    final user = body['user'] as Map<String, dynamic>?;
+    return LoginResult(
+      accessToken: body['access_token'] as String,
+      expiresIn: body['expires_in'] as int? ?? 0,
+      roles: (body['roles'] as List? ?? const []).cast<String>(),
+      permissions: (body['permissions'] as List? ?? const []).cast<String>(),
+      fullName: user?['full_name'] as String? ?? username,
+    );
+  }
+
+  /// Trae la foto de evidencia ya capturada (rostro) para mostrarla en el
+  /// historial. A diferencia del resto del flujo operativo (entry/exit/
+  /// evidence/upload, publico a proposito), este endpoint exige el permiso
+  /// `evidence.read` autenticado del lado de api-gateway - solo funciona si
+  /// el operador inicio sesion con una cuenta real (ver ApiClient.login).
+  Future<Uint8List> fetchEvidenceImage(String imageId) async {
+    final token = AppConfig.authToken;
+    if (token == null) {
+      throw Exception('Inicia sesión con una cuenta real para ver evidencia.');
+    }
+    final response = await _client.get(
+      Uri.parse('${AppConfig.apiBaseUrl}/evidence/image/$imageId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode >= 400) {
+      throw Exception('No se pudo cargar la foto de evidencia.');
+    }
+    return response.bodyBytes;
+  }
+
   Future<FaceServiceConfig> getFaceConfig() async {
-    final response = await _client.get(Uri.parse('${AppConfig.apiBaseUrl}/faces/config'));
+    final response =
+        await _client.get(Uri.parse('${AppConfig.apiBaseUrl}/faces/config'));
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode >= 400) {
-      throw Exception(body['detail'] ?? 'No se pudo consultar la configuracion facial.');
+      throw Exception(
+          body['detail'] ?? 'No se pudo consultar la configuracion facial.');
     }
     return FaceServiceConfig(
       faceServiceMode: body['face_service_mode'] as String? ?? 'mock',
       faceRealProvider: body['face_real_provider'] as String? ?? 'mock',
-      similarityThreshold: (body['similarity_threshold'] as num? ?? 0.82).toDouble(),
-      livenessThreshold: (body['liveness_threshold'] as num? ?? 0.75).toDouble(),
+      similarityThreshold:
+          (body['similarity_threshold'] as num? ?? 0.82).toDouble(),
+      livenessThreshold:
+          (body['liveness_threshold'] as num? ?? 0.75).toDouble(),
       embeddingDimensions: body['embedding_dimensions'] as int? ?? 0,
       opencvAvailable: body['opencv_available'] as bool? ?? false,
       insightfaceAvailable: body['insightface_available'] as bool? ?? false,
-      faceRecognitionAvailable: body['face_recognition_available'] as bool? ?? false,
+      faceRecognitionAvailable:
+          body['face_recognition_available'] as bool? ?? false,
       providerAvailable: body['provider_available'] as bool? ?? false,
       modelLoaded: body['model_loaded'] as bool? ?? false,
       activeProvider: body['active_provider'] as String? ?? 'unknown',
@@ -87,13 +142,16 @@ class ApiClient {
       success: body['success'] as bool? ?? false,
       message: body['message'] as String? ?? 'Sin mensaje',
       auditLogId: body['audit_log_id'] as String? ?? 'n/a',
-      session: body['session'] is Map<String, dynamic> ? Map<String, dynamic>.from(body['session'] as Map<String, dynamic>) : null,
+      session: body['session'] is Map<String, dynamic>
+          ? Map<String, dynamic>.from(body['session'] as Map<String, dynamic>)
+          : null,
     );
   }
 
   Future<PaymentLookupResult> checkPaymentByPlate(String plateText) async {
     final response = await _client.get(
-      Uri.parse('${AppConfig.apiBaseUrl}/payments/by-plate/${Uri.encodeComponent(plateText)}'),
+      Uri.parse(
+          '${AppConfig.apiBaseUrl}/payments/by-plate/${Uri.encodeComponent(plateText)}'),
     );
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -106,7 +164,8 @@ class ApiClient {
       message: body['message'] as String? ?? 'Sin mensaje',
       sessionId: body['session_id'] as String? ?? 'n/a',
       plateText: body['plate_text'] as String? ?? plateText,
-      entryTime: DateTime.tryParse(body['entry_time'] as String? ?? '') ?? DateTime.now(),
+      entryTime: DateTime.tryParse(body['entry_time'] as String? ?? '') ??
+          DateTime.now(),
       exitTime: DateTime.tryParse(body['exit_time'] as String? ?? ''),
       sessionStatus: body['session_status'] as String? ?? 'UNKNOWN',
       durationMinutes: body['duration_minutes'] as int? ?? 0,
@@ -116,7 +175,8 @@ class ApiClient {
       paidAt: DateTime.tryParse(body['paid_at'] as String? ?? ''),
       paidAmount: (body['paid_amount'] as num?)?.toDouble(),
       paymentMethod: body['payment_method'] as String?,
-      paymentValidUntil: DateTime.tryParse(body['payment_valid_until'] as String? ?? ''),
+      paymentValidUntil:
+          DateTime.tryParse(body['payment_valid_until'] as String? ?? ''),
       receiptNumber: body['receipt_number'] as String?,
       accessType: body['access_type'] as String?,
       personId: body['person_id'] as String?,
@@ -165,7 +225,8 @@ class ApiClient {
       objectName: body['object_name'] as String? ?? '-',
       imageType: body['image_type'] as String? ?? imageType.value,
       plate: body['plate'] as String? ?? plate,
-      createdAt: DateTime.tryParse(body['created_at'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(body['created_at'] as String? ?? '') ??
+          DateTime.now(),
       sessionId: body['session_id'] as String?,
     );
   }
@@ -198,7 +259,9 @@ class ApiClient {
       imageId: body['image_id'] as String? ?? imageId,
       plateText: body['plate_text'] as String?,
       confidence: (body['confidence'] as num? ?? 0).toDouble(),
-      boundingBox: body['bounding_box'] is Map ? Map<String, dynamic>.from(body['bounding_box'] as Map) : null,
+      boundingBox: body['bounding_box'] is Map
+          ? Map<String, dynamic>.from(body['bounding_box'] as Map)
+          : null,
       candidates: rawCandidates
           .whereType<Map>()
           .map(
@@ -238,7 +301,8 @@ class ApiClient {
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode >= 400) {
-      throw Exception(body['detail'] ?? 'No se pudo detectar la placa por lote.');
+      throw Exception(
+          body['detail'] ?? 'No se pudo detectar la placa por lote.');
     }
 
     final rawResults = body['results'] as List? ?? const [];
@@ -350,11 +414,14 @@ class ApiClient {
     final faceValidationData = body['face_validation'] is Map<String, dynamic>
         ? body['face_validation'] as Map<String, dynamic>
         : null;
-    final parsedSimilarity = (faceValidationData?['similarity'] as num?)?.toDouble();
-    final parsedDistance = (faceValidationData?['distance'] as num?)?.toDouble();
-    final parsedThreshold = (faceValidationData?['threshold'] as num?)?.toDouble();
-    final parsedFaceMatch =
-        faceValidationData?['match'] as bool? ?? faceValidationData?['face_match'] as bool?;
+    final parsedSimilarity =
+        (faceValidationData?['similarity'] as num?)?.toDouble();
+    final parsedDistance =
+        (faceValidationData?['distance'] as num?)?.toDouble();
+    final parsedThreshold =
+        (faceValidationData?['threshold'] as num?)?.toDouble();
+    final parsedFaceMatch = faceValidationData?['match'] as bool? ??
+        faceValidationData?['face_match'] as bool?;
 
     return AuthorizationResult(
       authorized: body['authorized'] as bool? ?? false,
@@ -374,10 +441,14 @@ class ApiClient {
               paymentStatus: sessionData['payment_status'] as String,
               plateText: sessionData['plate_text'] as String,
               personType: sessionData['person_type'] as String?,
-              accessType: sessionData['access_type'] as String? ?? body['access_type'] as String?,
-              personId: sessionData['person_id'] as String? ?? body['person_id'] as String?,
-              personName: sessionData['person_name'] as String? ?? body['person_name'] as String?,
-              roleType: sessionData['role_type'] as String? ?? body['role_type'] as String?,
+              accessType: sessionData['access_type'] as String? ??
+                  body['access_type'] as String?,
+              personId: sessionData['person_id'] as String? ??
+                  body['person_id'] as String?,
+              personName: sessionData['person_name'] as String? ??
+                  body['person_name'] as String?,
+              roleType: sessionData['role_type'] as String? ??
+                  body['role_type'] as String?,
               permitStatus: sessionData['permit_status'] as String? ??
                   body['permit_status'] as String? ??
                   body['member_permit_status'] as String?,
@@ -394,12 +465,16 @@ class ApiClient {
               provider: faceValidationData['provider'] as String? ?? 'unknown',
               mode: faceValidationData['mode'] as String? ?? 'unknown',
               modelName: faceValidationData['model_name'] as String?,
-              qualityScore: (faceValidationData['quality_score'] as num?)?.toDouble(),
+              qualityScore:
+                  (faceValidationData['quality_score'] as num?)?.toDouble(),
               embeddingSize: faceValidationData['embedding_size'] as int? ?? 0,
               boundingBox: faceValidationData['bounding_box'] is Map
-                  ? Map<String, dynamic>.from(faceValidationData['bounding_box'] as Map)
+                  ? Map<String, dynamic>.from(
+                      faceValidationData['bounding_box'] as Map)
                   : null,
-              warnings: (faceValidationData['warnings'] as List? ?? const []).map((item) => item.toString()).toList(),
+              warnings: (faceValidationData['warnings'] as List? ?? const [])
+                  .map((item) => item.toString())
+                  .toList(),
             )
           : null,
       faceMatch: parsedFaceMatch,

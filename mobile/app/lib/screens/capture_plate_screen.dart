@@ -26,7 +26,9 @@ class _CapturePlateScreenState extends State<CapturePlateScreen> {
     try {
       final cameras = await availableCameras();
       if (cameras.isNotEmpty) {
-        final controller = CameraController(cameras.first, ResolutionPreset.medium, enableAudio: false);
+        final controller = CameraController(
+            cameras.first, ResolutionPreset.medium,
+            enableAudio: false);
         await controller.initialize();
         if (!mounted) return;
         setState(() {
@@ -83,7 +85,8 @@ class _CapturePlateScreenState extends State<CapturePlateScreen> {
                   controller: _controller,
                   isReady: _ready,
                   title: 'Camara no disponible',
-                  subtitle: 'Puedes escribir la placa manualmente o usar deteccion simulada.',
+                  subtitle:
+                      'Puedes escribir la placa manualmente o usar deteccion simulada.',
                 ),
               ),
             const SizedBox(height: 16),
@@ -99,7 +102,8 @@ class _CapturePlateScreenState extends State<CapturePlateScreen> {
             FilledButton.icon(
               onPressed: _useManualPlate,
               icon: const Icon(Icons.edit),
-              label: Text(_ready ? 'Usar captura y placa' : 'Usar placa manual'),
+              label:
+                  Text(_ready ? 'Usar captura y placa' : 'Usar placa manual'),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(

@@ -20,7 +20,10 @@ class GaritaPresenceEvent {
 /// motivo (ej. "Payment status is not PAID", "Face verification failed")
 /// para mostrarlo tal cual al usuario en vez de un generico "RECHAZADO".
 class GaritaResultEvent {
-  const GaritaResultEvent({required this.authorized, required this.message, this.faceWarnings = const []});
+  const GaritaResultEvent(
+      {required this.authorized,
+      required this.message,
+      this.faceWarnings = const []});
   final bool authorized;
   final String message;
   final List<String> faceWarnings;
@@ -40,12 +43,19 @@ class GaritaMqttService {
 
   static const String topicPresencia = 'ucepark/garita/eventos';
   static const String topicRostroEvidencia = 'ucepark/garita/rostro_evidencia';
-  static const String topicResultadoDetalle = 'ucepark/garita/resultado_detalle';
+  static const String topicResultadoDetalle =
+      'ucepark/garita/resultado_detalle';
   static const String topicPlacaDetectada = 'ucepark/garita/placa_detectada';
   // garita_controller.py pide otra foto por aca cuando el rechazo es
   // especificamente por no detectar rostro y todavia quedan intentos (hasta
   // 3 en total) - sin esperar una nueva presencia del vehiculo.
-  static const String topicReintentarRostro = 'ucepark/garita/reintentar_rostro';
+  static const String topicReintentarRostro =
+      'ucepark/garita/reintentar_rostro';
+  // Estado real del ESP32 (ver garita_firmware.ino): "online" retenido al
+  // conectar, "offline" retenido automaticamente por el broker (Last Will)
+  // si el ESP32 se cae sin avisar. Distinto de `isConnected`, que solo dice
+  // si el CELULAR sigue conectado al broker.
+  static const String topicEstadoGarita = 'ucepark/garita/estado';
 
   MqttServerClient? _client;
   final _presenceController = StreamController<GaritaPresenceEvent>.broadcast();
@@ -60,6 +70,10 @@ class GaritaMqttService {
   bool _reconnecting = false;
   Timer? _reconnectTimer;
 
+  // null = todavia no se sabe (recien conectado, esperando el retenido de
+  // ucepark/garita/estado, o el celular ni siquiera esta conectado al broker).
+  bool? _espOnline;
+
   /// Se llama cada vez que cambia isConnected (conectado <-> caido/reconectando),
   /// para que la UI pueda refrescar el icono sin depender de otro setState.
   void Function()? onConnectionChanged;
@@ -68,7 +82,12 @@ class GaritaMqttService {
   Stream<GaritaResultEvent> get resultStream => _resultController.stream;
   Stream<GaritaPlateEvent> get plateStream => _plateController.stream;
   Stream<void> get retryStream => _retryController.stream;
-  bool get isConnected => _client?.connectionStatus?.state == MqttConnectionState.connected;
+  bool get isConnected =>
+      _client?.connectionStatus?.state == MqttConnectionState.connected;
+
+  /// Estado real del ESP32 (no del celular): true = online, false = offline
+  /// (ya sea reportado o inferido por el Last Will), null = todavia sin dato.
+  bool? get espOnline => isConnected ? _espOnline : null;
 
   Future<bool> connect() async {
     if (!AppConfig.hasMqttHost) {
@@ -94,7 +113,8 @@ class GaritaMqttService {
     client.onDisconnected = _handleDisconnected;
     client.setProtocolV311();
 
-    final connMessage = MqttConnectMessage().withClientIdentifier(clientId).startClean();
+    final connMessage =
+        MqttConnectMessage().withClientIdentifier(clientId).startClean();
     client.connectionMessage = connMessage;
 
     try {
@@ -108,16 +128,19 @@ class GaritaMqttService {
     }
 
     _client = client;
+    _espOnline = null;
     client.subscribe(topicPresencia, MqttQos.atMostOnce);
     client.subscribe(topicResultadoDetalle, MqttQos.atMostOnce);
     client.subscribe(topicPlacaDetectada, MqttQos.atMostOnce);
     client.subscribe(topicReintentarRostro, MqttQos.atMostOnce);
+    client.subscribe(topicEstadoGarita, MqttQos.atLeastOnce);
     client.updates?.listen(_onMessage);
     onConnectionChanged?.call();
     return true;
   }
 
   void _handleDisconnected() {
+    _espOnline = null;
     onConnectionChanged?.call();
     if (_manualDisconnect) return;
     _scheduleReconnect();
@@ -140,7 +163,8 @@ class GaritaMqttService {
   void _onMessage(List<MqttReceivedMessage<MqttMessage>> messages) {
     for (final message in messages) {
       final recMess = message.payload as MqttPublishMessage;
-      final raw = MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
+      final raw =
+          MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
 
       if (message.topic == topicPresencia) {
         try {
@@ -158,7 +182,8 @@ class GaritaMqttService {
           _resultController.add(GaritaResultEvent(
             authorized: data['authorized'] == true,
             message: (data['message'] as String?) ?? '',
-            faceWarnings: (data['face_warnings'] as List?)?.cast<String>() ?? const [],
+            faceWarnings:
+                (data['face_warnings'] as List?)?.cast<String>() ?? const [],
           ));
         } catch (_) {
           // Mensaje no valido, se ignora.
@@ -175,18 +200,24 @@ class GaritaMqttService {
         }
       } else if (message.topic == topicReintentarRostro) {
         _retryController.add(null);
+      } else if (message.topic == topicEstadoGarita) {
+        _espOnline = raw.trim() == 'online';
+        onConnectionChanged?.call();
       }
     }
   }
 
   void publishFaceEvidence({required String mode, required String imageId}) {
     final client = _client;
-    if (client == null || client.connectionStatus?.state != MqttConnectionState.connected) {
+    if (client == null ||
+        client.connectionStatus?.state != MqttConnectionState.connected) {
       return;
     }
-    final payload = jsonEncode({'event': 'rostro_listo', 'mode': mode, 'image_id': imageId});
+    final payload = jsonEncode(
+        {'event': 'rostro_listo', 'mode': mode, 'image_id': imageId});
     final builder = MqttClientPayloadBuilder()..addString(payload);
-    client.publishMessage(topicRostroEvidencia, MqttQos.atLeastOnce, builder.payload!);
+    client.publishMessage(
+        topicRostroEvidencia, MqttQos.atLeastOnce, builder.payload!);
   }
 
   void disconnect() {

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_models.dart';
-import '../widgets/ucepark_brand_header.dart';
+import '../theme/ucepark_theme.dart';
+import '../widgets/uce_widgets.dart';
 import '../state/parking_app_scope.dart';
 import 'mode_hub_screen.dart';
 
@@ -48,18 +49,22 @@ class _SetupScreenState extends State<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Selección de acceso')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const UceParkBrandHeader(
-            compact: true,
-            subtitle: 'Configuración inicial de universidad, campus y puerta',
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
+          children: [
+            const UceTopBar(),
+            const SizedBox(height: 14),
+            Text(
+              'Selección de acceso',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const Text(
+              'Configuración inicial de universidad, campus y puerta',
+              style: TextStyle(fontSize: 13.5, color: UceParkColors.muted),
+            ),
+            const SizedBox(height: 16),
+            UceCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -109,8 +114,8 @@ class _SetupScreenState extends State<SetupScreen> {
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

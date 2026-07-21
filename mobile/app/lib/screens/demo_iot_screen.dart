@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/app_models.dart';
 import '../services/api_client.dart';
 import '../theme/ucepark_theme.dart';
-import '../widgets/ucepark_brand_header.dart';
+import '../widgets/uce_widgets.dart';
 
 class DemoIotScreen extends StatefulWidget {
   const DemoIotScreen({super.key});
@@ -45,18 +45,22 @@ class _DemoIotScreenState extends State<DemoIotScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Demo IoT')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const UceParkBrandHeader(
-            compact: true,
-            subtitle: 'Control institucional de barrera y mensajería MQTT',
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
+          children: [
+            const UceTopBar(showBack: true),
+            const SizedBox(height: 14),
+            Text(
+              'Demo IoT',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const Text(
+              'Control institucional de barrera y mensajería MQTT',
+              style: TextStyle(fontSize: 13.5, color: UceParkColors.muted),
+            ),
+            const SizedBox(height: 16),
+            UceCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -75,16 +79,23 @@ class _DemoIotScreenState extends State<DemoIotScreen> {
                         ? const SizedBox(
                             height: 18,
                             width: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
                           )
                         : const Text('Abrir barrera demo'),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 16),
-                    Text(
-                      _error!,
-                      style:
-                          TextStyle(color: Theme.of(context).colorScheme.error),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: UceParkColors.dangerBg,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: UceParkColors.dangerDark),
+                      ),
                     ),
                   ],
                   if (_result != null) ...[
@@ -93,9 +104,9 @@ class _DemoIotScreenState extends State<DemoIotScreen> {
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: _result!.published
-                            ? UceParkColors.success.withValues(alpha: 0.08)
-                            : UceParkColors.danger.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
+                            ? UceParkColors.successBg
+                            : UceParkColors.dangerBg,
+                        borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color: _result!.published
                               ? UceParkColors.success
@@ -122,8 +133,8 @@ class _DemoIotScreenState extends State<DemoIotScreen> {
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

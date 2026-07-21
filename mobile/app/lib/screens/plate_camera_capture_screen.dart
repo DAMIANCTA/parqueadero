@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
+import '../theme/ucepark_theme.dart';
+
 class PlateCameraCaptureScreen extends StatefulWidget {
   const PlateCameraCaptureScreen({super.key});
 
@@ -261,12 +263,13 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen>
                       width: 280,
                       height: 120,
                       decoration: BoxDecoration(
-                        border: Border.all(
-                            color: const Color(0xFF7A1F2E), width: 3),
+                        border:
+                            Border.all(color: UceParkColors.maroon, width: 3),
                         borderRadius: BorderRadius.circular(12),
-                        boxShadow: const [
+                        boxShadow: [
                           BoxShadow(
-                              color: Color(0x557A1F2E),
+                              color:
+                                  UceParkColors.maroon.withValues(alpha: 0.35),
                               blurRadius: 18,
                               spreadRadius: 2),
                         ],
@@ -327,11 +330,6 @@ class _PlateCameraCaptureScreenState extends State<PlateCameraCaptureScreen>
                   else
                     FilledButton.icon(
                       onPressed: _capturing ? null : _captureThreePhotos,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF15294D),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
                       icon: _capturing
                           ? const SizedBox(
                               height: 18,

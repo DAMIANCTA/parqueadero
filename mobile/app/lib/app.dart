@@ -13,25 +13,26 @@ import 'state/parking_app_scope.dart';
 import 'state/parking_app_state.dart';
 import 'theme/ucepark_theme.dart';
 
-class SmartParkingApp extends StatefulWidget {
-  const SmartParkingApp({super.key});
+class SmartParkingApp extends StatelessWidget {
+  const SmartParkingApp({super.key, required this.appState});
 
-  @override
-  State<SmartParkingApp> createState() => _SmartParkingAppState();
-}
+  final ParkingAppState appState;
 
-class _SmartParkingAppState extends State<SmartParkingApp> {
-  final ParkingAppState _appState = ParkingAppState();
+  String get _initialRoute {
+    if (!appState.isLoggedIn) return LoginScreen.routeName;
+    if (appState.selection == null) return SetupScreen.routeName;
+    return ModeHubScreen.routeName;
+  }
 
   @override
   Widget build(BuildContext context) {
     return ParkingAppScope(
-      notifier: _appState,
+      notifier: appState,
       child: MaterialApp(
         title: 'UCEPark',
         debugShowCheckedModeBanner: false,
         theme: UceParkTheme.build(),
-        initialRoute: LoginScreen.routeName,
+        initialRoute: _initialRoute,
         routes: {
           LoginScreen.routeName: (_) => const LoginScreen(),
           SetupScreen.routeName: (_) => const SetupScreen(),

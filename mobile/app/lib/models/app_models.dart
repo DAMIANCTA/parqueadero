@@ -38,8 +38,10 @@ extension LivenessChallengeValue on LivenessChallenge {
       };
 
   String get instruction => switch (this) {
-        LivenessChallenge.lookLeft => 'Gira ligeramente el rostro hacia la izquierda.',
-        LivenessChallenge.lookRight => 'Gira ligeramente el rostro hacia la derecha.',
+        LivenessChallenge.lookLeft =>
+          'Gira ligeramente el rostro hacia la izquierda.',
+        LivenessChallenge.lookRight =>
+          'Gira ligeramente el rostro hacia la derecha.',
         LivenessChallenge.blink => 'Mira la camara y parpadea una vez.',
       };
 }
@@ -72,6 +74,22 @@ class OperatorSession {
   final DateTime loggedAt;
 
   bool get isSecurityOperator => username.toLowerCase().contains('security');
+}
+
+class LoginResult {
+  const LoginResult({
+    required this.accessToken,
+    required this.expiresIn,
+    required this.roles,
+    required this.permissions,
+    required this.fullName,
+  });
+
+  final String accessToken;
+  final int expiresIn;
+  final List<String> roles;
+  final List<String> permissions;
+  final String fullName;
 }
 
 class AccessPointSelection {
@@ -118,7 +136,8 @@ class ResultSessionSummary {
   final String? permitStatus;
 
   bool get isMember =>
-      (accessType ?? '').toUpperCase() == 'MEMBER' || paymentStatus.toUpperCase() == 'NOT_REQUIRED';
+      (accessType ?? '').toUpperCase() == 'MEMBER' ||
+      paymentStatus.toUpperCase() == 'NOT_REQUIRED';
 
   bool get isVisitor => !isMember;
 
@@ -263,7 +282,9 @@ class PaymentLookupResult {
   bool get isPaid => found && paymentStatus == 'PAID';
 
   bool get isMemberSession =>
-      found && ((accessType ?? '').toUpperCase() == 'MEMBER' || paymentStatus == 'NOT_REQUIRED');
+      found &&
+      ((accessType ?? '').toUpperCase() == 'MEMBER' ||
+          paymentStatus == 'NOT_REQUIRED');
 
   bool get requiresPayment => found && !isMemberSession;
 
@@ -397,7 +418,8 @@ class PlateBatchDetectionResult {
   final DateTime detectedAt;
 
   bool get detected => status == 'DETECTED' && (plateText?.isNotEmpty ?? false);
-  bool get autoAccepted => confidence >= PlateDetectionResult.minimumAutoAcceptance && detected;
+  bool get autoAccepted =>
+      confidence >= PlateDetectionResult.minimumAutoAcceptance && detected;
   bool get inconsistent => warnings.contains('INCONSISTENT_RESULT');
 
   PlateDetectionResult toPrimaryDetection() {
@@ -458,7 +480,8 @@ class FaceServiceConfig {
   final String? environment;
   final String? modelError;
 
-  bool get usesRealOrHybrid => faceServiceMode == 'hybrid' || faceServiceMode == 'real';
+  bool get usesRealOrHybrid =>
+      faceServiceMode == 'hybrid' || faceServiceMode == 'real';
   bool get runtimeReady => providerAvailable && modelLoaded && opencvAvailable;
   bool get usingFallback => usesRealOrHybrid && !runtimeReady;
 }
@@ -499,7 +522,8 @@ class FaceValidationUiResult {
   bool get usesDistanceMetric {
     final providerValue = provider.toLowerCase();
     final modelValue = (modelName ?? '').toLowerCase();
-    return providerValue.contains('face_recognition') || modelValue.contains('face_recognition');
+    return providerValue.contains('face_recognition') ||
+        modelValue.contains('face_recognition');
   }
 
   String get matchLabel {
@@ -509,7 +533,8 @@ class FaceValidationUiResult {
     return match! ? 'MATCH' : 'NO_MATCH';
   }
 
-  double? get effectiveScore => usesDistanceMetric ? (distance ?? similarity) : (similarity ?? distance);
+  double? get effectiveScore =>
+      usesDistanceMetric ? (distance ?? similarity) : (similarity ?? distance);
 
   String get scoreLabel => usesDistanceMetric ? 'Distance' : 'Similarity';
 

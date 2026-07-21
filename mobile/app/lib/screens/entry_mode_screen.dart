@@ -5,10 +5,12 @@ import 'package:image_picker/image_picker.dart';
 
 import '../config/debug_flags.dart';
 import '../models/app_models.dart';
+import '../models/history_entry.dart';
 import '../services/api_client.dart';
 import '../services/image_preparation_service.dart';
 import '../state/parking_app_scope.dart';
-import '../widgets/ucepark_brand_header.dart';
+import '../theme/ucepark_theme.dart';
+import '../widgets/uce_widgets.dart';
 import 'face_camera_capture_screen.dart';
 import 'plate_camera_capture_screen.dart';
 import 'result_screen.dart';
@@ -215,11 +217,12 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
       );
       if (!mounted) return;
       appScope.addHistory(
-        HistoryItem(
+        HistoryEntry.fromResult(
           mode: ModeType.entry,
           plateText: effectivePlate,
           result: result,
           plateDetection: _plateDetection,
+          faceImageId: faceEvidence.imageId,
         ),
       );
       Navigator.of(context)
@@ -648,12 +651,8 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
   }
 
   Widget _buildFaceEvidenceCard() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.black12),
-        borderRadius: BorderRadius.circular(8),
-      ),
+    return UceCard(
+      padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -719,12 +718,8 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
   }
 
   Widget _buildPlateDetectionCard() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.black12),
-        borderRadius: BorderRadius.circular(8),
-      ),
+    return UceCard(
+      padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -939,76 +934,83 @@ class _EntryModeScreenState extends State<EntryModeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Modo entrada')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const UceParkBrandHeader(
-            compact: true,
-            subtitle: 'Registro institucional de ingreso vehicular',
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<PersonType>(
-            value: _personType,
-            decoration: const InputDecoration(
-                labelText: 'Tipo de persona', border: OutlineInputBorder()),
-            items: PersonType.values
-                .map((type) =>
-                    DropdownMenuItem(value: type, child: Text(type.label)))
-                .toList(),
-            onChanged: (value) =>
-                setState(() => _personType = value ?? PersonType.visitor),
-          ),
-          const SizedBox(height: 16),
-          _buildPlateDetectionCard(),
-          const SizedBox(height: 16),
-          _buildFaceEvidenceCard(),
-          if (showDebugControls) ...[
-            const SizedBox(height: 12),
-            if (!_useRealFaceFlow)
-              SwitchListTile(
-                value: _faceValid,
-                title: const Text('Simulador de rostro valido'),
-                subtitle: Text(_faceValid
-                    ? 'La validacion facial pasara.'
-                    : 'La validacion facial fallara.'),
-                onChanged: (value) => setState(() => _faceValid = value),
-              ),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              value: _livenessValid,
-              title: const Text('Simulador de liveness valido'),
-              subtitle: Text(_livenessValid
-                  ? 'El liveness pasara.'
-                  : 'El liveness sera bloqueado.'),
-              onChanged: (value) => setState(() => _livenessValid = value),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
+          children: [
+            const UceTopBar(showBack: true),
+            const SizedBox(height: 14),
+            Text(
+              'Modo entrada',
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-            if (!_useRealFaceFlow) ...[
-              const SizedBox(height: 20),
-              Text('Confianza rostro: ${_faceConfidence.toStringAsFixed(2)}'),
-              Slider(
-                  value: _faceConfidence,
-                  onChanged: (value) =>
-                      setState(() => _faceConfidence = value)),
+            const Text(
+              'Registro institucional de ingreso vehicular',
+              style: TextStyle(fontSize: 13.5, color: UceParkColors.muted),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<PersonType>(
+              value: _personType,
+              decoration: const InputDecoration(
+                  labelText: 'Tipo de persona', border: OutlineInputBorder()),
+              items: PersonType.values
+                  .map((type) =>
+                      DropdownMenuItem(value: type, child: Text(type.label)))
+                  .toList(),
+              onChanged: (value) =>
+                  setState(() => _personType = value ?? PersonType.visitor),
+            ),
+            const SizedBox(height: 16),
+            _buildPlateDetectionCard(),
+            const SizedBox(height: 16),
+            _buildFaceEvidenceCard(),
+            if (showDebugControls) ...[
+              const SizedBox(height: 12),
+              if (!_useRealFaceFlow)
+                SwitchListTile(
+                  value: _faceValid,
+                  title: const Text('Simulador de rostro valido'),
+                  subtitle: Text(_faceValid
+                      ? 'La validacion facial pasara.'
+                      : 'La validacion facial fallara.'),
+                  onChanged: (value) => setState(() => _faceValid = value),
+                ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                value: _livenessValid,
+                title: const Text('Simulador de liveness valido'),
+                subtitle: Text(_livenessValid
+                    ? 'El liveness pasara.'
+                    : 'El liveness sera bloqueado.'),
+                onChanged: (value) => setState(() => _livenessValid = value),
+              ),
+              if (!_useRealFaceFlow) ...[
+                const SizedBox(height: 20),
+                Text('Confianza rostro: ${_faceConfidence.toStringAsFixed(2)}'),
+                Slider(
+                    value: _faceConfidence,
+                    onChanged: (value) =>
+                        setState(() => _faceConfidence = value)),
+              ],
             ],
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: (_submitting ||
+                      !_canSubmitWithPlate ||
+                      !_hasFaceEvidenceReady ||
+                      _processingPlateEvidence ||
+                      _uploadingFaceEvidence)
+                  ? null
+                  : _submit,
+              child: _submitting
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Registrar entrada'),
+            ),
           ],
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: (_submitting ||
-                    !_canSubmitWithPlate ||
-                    !_hasFaceEvidenceReady ||
-                    _processingPlateEvidence ||
-                    _uploadingFaceEvidence)
-                ? null
-                : _submit,
-            child: _submitting
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Registrar entrada'),
-          ),
-        ],
+        ),
       ),
     );
   }

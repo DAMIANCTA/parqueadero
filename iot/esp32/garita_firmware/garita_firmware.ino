@@ -28,6 +28,13 @@ Preferences preferences;
 // --- Tópicos MQTT (coinciden con iot-service/config.py de parking-service) ---
 const char* TOPIC_PRESENCIA = "ucepark/garita/eventos";
 const char* TOPIC_COMANDOS = "ucepark/garita/comandos";
+// Estado de conexion del propio ESP32 (no confundir con "el celular esta
+// conectado al broker"): se publica "online" retenido apenas conecta, y el
+// broker publica sola/automaticamente "offline" (Last Will) si el ESP32 se
+// desconecta de golpe (se apaga, pierde WiFi, etc.) sin avisar. Asi la app
+// movil puede saber si la garita fisica en si sigue viva, no solo si su
+// propia conexion MQTT esta arriba.
+const char* TOPIC_ESTADO = "ucepark/garita/estado";
 
 // --- Variables de Estado ---
 bool analizando = false;
@@ -119,6 +126,14 @@ void checkBootButton() {
     }
     digitalWrite(ledAmari, LOW);
 
+    // Reset deliberado (no una caida de energia): se avisa "offline" de una
+    // vez por su cuenta, sin esperar a que el broker note la falta de
+    // PINGREQ via el Last Will.
+    if (client.connected()) {
+      client.publish(TOPIC_ESTADO, "offline", true);
+      client.disconnect();
+    }
+
     WiFi.disconnect(true, true);
     delay(200);
 
@@ -205,6 +220,14 @@ void setup() {
 
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
+  // Keepalive minimo razonable (default de PubSubClient es 15s -> hasta 22s
+  // para que el broker note la caida). Con 2s, el broker dispara el Last
+  // Will (ucepark/garita/estado -> "offline") en ~3s si el ESP32 se apaga de
+  // golpe. Bajarlo mas arriesga falsos "desconectado" por jitter normal de
+  // WiFi; una caida de energia real nunca se puede detectar en 0ms exactos
+  // porque el dispositivo muerto no puede avisar - esto es lo mas cerca de
+  // "inmediato" que el protocolo MQTT permite sin generar falsos positivos.
+  client.setKeepAlive(2);
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -259,8 +282,9 @@ void loop() {
       Serial.print(mqtt_server);
       Serial.println("...");
 
-      if (client.connect("Garita01")) {
+      if (client.connect("Garita01", TOPIC_ESTADO, 1, true, "offline")) {
         client.subscribe(TOPIC_COMANDOS);
+        client.publish(TOPIC_ESTADO, "online", true);
         Serial.println("Conectado al Broker MQTT.");
 
         digitalWrite(ledRojo, LOW);

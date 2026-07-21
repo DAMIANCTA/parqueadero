@@ -1,6 +1,8 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
+import '../theme/ucepark_theme.dart';
+
 class FaceCameraCaptureScreen extends StatefulWidget {
   const FaceCameraCaptureScreen({super.key});
 
@@ -239,11 +241,12 @@ class _FaceCameraCaptureScreenState extends State<FaceCameraCaptureScreen>
                       height: 320,
                       decoration: BoxDecoration(
                         border: Border.all(
-                            color: const Color(0xFF5B4B8A), width: 3),
+                            color: UceParkColors.biometric, width: 3),
                         borderRadius: BorderRadius.circular(999),
-                        boxShadow: const [
+                        boxShadow: [
                           BoxShadow(
-                              color: Color(0x555B4B8A),
+                              color: UceParkColors.biometric
+                                  .withValues(alpha: 0.35),
                               blurRadius: 18,
                               spreadRadius: 2),
                         ],
@@ -283,11 +286,6 @@ class _FaceCameraCaptureScreenState extends State<FaceCameraCaptureScreen>
                   else
                     FilledButton.icon(
                       onPressed: _capturing ? null : _captureFace,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF15294D),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
                       icon: _capturing
                           ? const SizedBox(
                               height: 20,

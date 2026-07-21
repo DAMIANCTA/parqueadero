@@ -14,13 +14,15 @@ class ImagePreparationService {
   }) async {
     final sourceBytes = await file.readAsBytes();
     final prepared = _normalizeToJpeg(sourceBytes);
-    final normalizedFileName = prepared.wasNormalized ? _normalizeFileName(file.name) : file.name;
+    final normalizedFileName =
+        prepared.wasNormalized ? _normalizeFileName(file.name) : file.name;
 
     return LocalEvidenceDraft(
       label: label,
       fileName: normalizedFileName,
       bytes: prepared.bytes,
-      contentType: prepared.wasNormalized ? 'image/jpeg' : 'application/octet-stream',
+      contentType:
+          prepared.wasNormalized ? 'image/jpeg' : 'application/octet-stream',
       isMock: false,
     );
   }
@@ -32,9 +34,8 @@ class ImagePreparationService {
         return _PreparedImage(bytes: sourceBytes, wasNormalized: false);
       }
 
-      final resized = decoded.width > 1600
-          ? img.copyResize(decoded, width: 1600)
-          : decoded;
+      final resized =
+          decoded.width > 1600 ? img.copyResize(decoded, width: 1600) : decoded;
       return _PreparedImage(
         bytes: Uint8List.fromList(img.encodeJpg(resized, quality: 88)),
         wasNormalized: true,
@@ -46,7 +47,8 @@ class ImagePreparationService {
 
   String _normalizeFileName(String originalName) {
     final dotIndex = originalName.lastIndexOf('.');
-    final baseName = dotIndex > 0 ? originalName.substring(0, dotIndex) : originalName;
+    final baseName =
+        dotIndex > 0 ? originalName.substring(0, dotIndex) : originalName;
     final cleaned = baseName.trim().isEmpty ? 'capture' : baseName.trim();
     return '$cleaned.jpg';
   }

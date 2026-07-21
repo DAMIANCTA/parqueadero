@@ -37,9 +37,12 @@ class CameraPreviewPanel extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.camera_alt_outlined, size: 40, color: Theme.of(context).colorScheme.primary),
+          Icon(Icons.camera_alt_outlined,
+              size: 40, color: Theme.of(context).colorScheme.primary),
           const SizedBox(height: 12),
-          Text(title, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
+          Text(title,
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center),
           const SizedBox(height: 8),
           Text(subtitle, textAlign: TextAlign.center),
         ],

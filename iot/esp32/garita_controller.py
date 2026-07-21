@@ -89,10 +89,11 @@ def format_ecuadorian_plate(text: str) -> str | None:
     return None
 
 
-def encode_jwt(secret_key: str, issuer: str, audience: str, claims: dict, expires_minutes: int = 60) -> str:
+def encode_jwt(secret_key: str, issuer: str, audience: str, claims: dict, expires_minutes: int = 60) -> tuple[str, int]:
     header = {"alg": "HS256", "typ": "JWT"}
     now = int(time.time())
-    payload = {**claims, "iss": issuer, "aud": audience, "iat": now, "exp": now + expires_minutes * 60}
+    exp = now + expires_minutes * 60
+    payload = {**claims, "iss": issuer, "aud": audience, "iat": now, "exp": exp}
 
     def b64(value: dict) -> str:
         raw = json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -101,24 +102,14 @@ def encode_jwt(secret_key: str, issuer: str, audience: str, claims: dict, expire
     signing_input = f"{b64(header)}.{b64(payload)}"
     signature = hmac.new(secret_key.encode("utf-8"), signing_input.encode("utf-8"), hashlib.sha256).digest()
     signature_b64 = base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
-    return f"{signing_input}.{signature_b64}"
+    return f"{signing_input}.{signature_b64}", exp
 
 
 class GaritaController:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
-        token = encode_jwt(
-            args.jwt_secret,
-            "smart-parking-university",
-            "smart-parking-clients",
-            {
-                "sub": "garita-controller",
-                "username": "garita-controller",
-                "roles": ["SECURITY"],
-                "permissions": ["parking.entry", "parking.exit", "plates.detect"],
-            },
-        )
-        self.headers = {"Authorization": f"Bearer {token}"}
+        self._token_exp = 0
+        self._refresh_token()
 
         # La webcam USB se abre UNA sola vez y se mantiene abierta: la vista
         # previa y la captura real leen del mismo objeto.
@@ -153,6 +144,32 @@ class GaritaController:
         self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"garita-controller-{uuid.uuid4().hex[:8]}")
         self.mqtt_client.on_connect = self._on_connect
         self.mqtt_client.on_message = self._on_message
+
+    def _refresh_token(self) -> None:
+        # El JWT se generaba una sola vez al arrancar el script (60 min de
+        # vigencia) y nunca se renovaba: pasada esa hora, plate-service y
+        # parking-service empezaban a responder 401 en TODAS las requests
+        # (deteccion de placa incluida), y el script se quedaba corriendo sin
+        # avisar nada mas que "no se pudo detectar la placa". Se refresca sola
+        # antes de que expire para que una sesion larga no deje de funcionar.
+        token, exp = encode_jwt(
+            self.args.jwt_secret,
+            "smart-parking-university",
+            "smart-parking-clients",
+            {
+                "sub": "garita-controller",
+                "username": "garita-controller",
+                "roles": ["SECURITY"],
+                "permissions": ["parking.entry", "parking.exit", "plates.detect"],
+            },
+        )
+        self._token_exp = exp
+        self.headers = {"Authorization": f"Bearer {token}"}
+
+    def _auth_headers(self) -> dict:
+        if time.time() >= self._token_exp - 60:
+            self._refresh_token()
+        return self.headers
 
     def run(self) -> None:
         print(f"Conectando a MQTT {self.args.mqtt_host}:{self.args.mqtt_port}...")
@@ -475,7 +492,7 @@ class GaritaController:
             response = requests.post(
                 f"{self.args.plate_service_url}/plates/detect",
                 files={"image": ("crop.jpg", buffer.tobytes(), "image/jpeg")},
-                headers=self.headers,
+                headers=self._auth_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -552,7 +569,7 @@ class GaritaController:
             f"{self.args.parking_service_url}/evidence/upload",
             data={"image_type": image_type, "plate": plate, "university_id": UNIVERSITY_ID},
             files={"file": ("capture.jpg", buffer.tobytes(), "image/jpeg")},
-            headers=self.headers,
+            headers=self._auth_headers(),
             timeout=30,
         )
         response.raise_for_status()
@@ -560,7 +577,7 @@ class GaritaController:
 
     def _call_parking(self, path: str, payload: dict) -> dict:
         response = requests.post(
-            f"{self.args.parking_service_url}{path}", json=payload, headers=self.headers, timeout=60
+            f"{self.args.parking_service_url}{path}", json=payload, headers=self._auth_headers(), timeout=60
         )
         response.raise_for_status()
         return response.json()
@@ -569,7 +586,7 @@ class GaritaController:
         try:
             response = requests.get(
                 f"{self.args.parking_service_url}/parking/active-session/{plate_text}",
-                headers=self.headers,
+                headers=self._auth_headers(),
                 timeout=5,
             )
             response.raise_for_status()
