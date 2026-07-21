@@ -349,6 +349,7 @@ class IntegrationService:
         content_type: str,
         image_type: str,
         plate: str,
+        university_id: str | None = None,
         session_id: str | None,
     ) -> dict:
         token = self._build_internal_token(["parking.entry"])
@@ -363,6 +364,8 @@ class IntegrationService:
             "image_type": image_type,
             "plate": plate,
         }
+        if university_id:
+            data["university_id"] = university_id
         if session_id:
             data["session_id"] = session_id
         with httpx.Client(timeout=self._build_timeout(self.evidence_downstream_timeout)) as client:
@@ -374,6 +377,30 @@ class IntegrationService:
             )
         response.raise_for_status()
         return response.json()
+
+    def get_parking_history(self, university_id: str | None = None) -> dict:
+        return self._get_json(
+            self.targets["parking"],
+            f"/parking/history{f'?university_id={university_id}' if university_id else ''}",
+            permissions=["parking.entry"],
+        )
+
+    def get_evidence_image_bytes(self, image_id: str) -> tuple[bytes, str]:
+        token = self._build_internal_token(["parking.entry"])
+        with httpx.Client(timeout=self._build_timeout(self.evidence_downstream_timeout)) as client:
+            response = client.get(
+                f"{self.targets['parking'].base_url}/evidence/image/{image_id}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        response.raise_for_status()
+        return response.content, response.headers.get("content-type", "image/jpeg")
+
+    def get_evidence_by_plate(self, plate_text: str, *, include_expired: bool = True) -> dict:
+        return self._get_json(
+            self.targets["parking"],
+            f"/evidence/by-plate/{plate_text}?include_expired={str(include_expired).lower()}",
+            permissions=["parking.entry"],
+        )
 
     def _check_http_service(self, name: str, base_url: str) -> DependencyHealth:
         try:

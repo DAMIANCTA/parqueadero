@@ -129,6 +129,7 @@ class ApiClient {
   Future<EvidenceUploadResult> uploadEvidence({
     required EvidenceImageType imageType,
     required String plate,
+    required String universityId,
     String? sessionId,
     required LocalEvidenceDraft evidence,
   }) async {
@@ -138,6 +139,7 @@ class ApiClient {
     )
       ..fields['image_type'] = imageType.value
       ..fields['plate'] = plate
+      ..fields['university_id'] = universityId
       ..files.add(
         http.MultipartFile.fromBytes(
           'file',

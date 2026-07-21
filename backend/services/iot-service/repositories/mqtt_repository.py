@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
 import threading
 import uuid
 
@@ -143,6 +144,7 @@ class MqttRepository:
                 "last_event_type": gate_state.get("last_event_type"),
                 "last_event_payload": gate_state.get("last_event_payload"),
                 "last_presence_at": gate_state.get("last_presence_at"),
+                "last_presence_mode": gate_state.get("last_presence_mode"),
                 "last_command": gate_state.get("last_command"),
                 "last_command_at": gate_state.get("last_command_at"),
                 "last_updated_at": gate_state.get("last_updated_at"),
@@ -256,7 +258,21 @@ class MqttRepository:
         gate_id = settings.iot_gate_default_id
         gate_state = self._ensure_gate_state(gate_id)
         timestamp = self._utc_now()
-        event_type = "PRESENCE_DETECTED" if payload.upper() == "PRESENCIA" else "EVENT_RECEIVED"
+
+        mode = None
+        try:
+            data = json.loads(payload)
+        except (ValueError, TypeError):
+            data = None
+
+        if isinstance(data, dict) and data.get("event") == "presencia":
+            event_type = "PRESENCE_DETECTED"
+            mode = data.get("mode")
+        elif payload.upper() == "PRESENCIA":
+            event_type = "PRESENCE_DETECTED"
+        else:
+            event_type = "EVENT_RECEIVED"
+
         status = "PRESENCE_DETECTED" if event_type == "PRESENCE_DETECTED" else gate_state["status"]
         with self._lock:
             gate_state.update(
@@ -269,9 +285,11 @@ class MqttRepository:
             )
             if event_type == "PRESENCE_DETECTED":
                 gate_state["last_presence_at"] = timestamp
+                if mode is not None:
+                    gate_state["last_presence_mode"] = mode
         print(
             "iot-service mqtt_event_received "
-            f"gate_id={gate_id} topic={message.topic} payload={payload} event_type={event_type}"
+            f"gate_id={gate_id} topic={message.topic} payload={payload} event_type={event_type} mode={mode}"
         )
 
     def _ensure_gate_state(self, gate_id: str) -> dict:
@@ -282,6 +300,7 @@ class MqttRepository:
                     "last_event_type": None,
                     "last_event_payload": None,
                     "last_presence_at": None,
+                    "last_presence_mode": None,
                     "last_command": None,
                     "last_command_at": None,
                     "last_updated_at": None,

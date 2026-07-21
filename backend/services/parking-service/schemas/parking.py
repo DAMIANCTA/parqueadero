@@ -105,3 +105,28 @@ class ParkingExitResponse(BaseModel):
     access_event_id: str
     audit_log_id: str
     incident_id: str | None = None
+
+
+class ActiveSessionResponse(BaseModel):
+    plate_text: str
+    active: bool
+
+
+class AccessHistoryItem(BaseModel):
+    session_id: str
+    session_status: str
+    access_type: AccessType
+    plate_text: str
+    person_name: str | None = None
+    payment_status: str
+    entry_time: str | None = None
+    exit_time: str | None = None
+    entry_face_evidence_id: str | None = None
+    entry_plate_evidence_id: str | None = None
+    exit_face_evidence_id: str | None = None
+    exit_plate_evidence_id: str | None = None
+
+
+class ParkingHistoryResponse(BaseModel):
+    total: int
+    items: list[AccessHistoryItem]

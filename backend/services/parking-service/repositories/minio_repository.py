@@ -39,6 +39,14 @@ class MinioRepository:
             content_type=content_type or "application/octet-stream",
         )
 
+    def download_object(self, *, bucket: str, object_name: str) -> bytes:
+        response = self.client.get_object(bucket, object_name)
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()
+
     def _ensure_bucket(self, bucket: str) -> None:
         if bucket in self._ensured_buckets:
             return

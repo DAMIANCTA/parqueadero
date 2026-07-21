@@ -188,6 +188,7 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
       final faceEvidence = await _ensureFaceEvidenceUploaded(
         imageType: EvidenceImageType.faceExit,
         plate: effectivePlate,
+        universityId: selection.universityId,
       );
       final plateEvidence = _selectedPlateEvidence;
       if (plateEvidence == null) {
@@ -443,6 +444,7 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
   Future<EvidenceUploadResult> _ensureFaceEvidenceUploaded({
     required EvidenceImageType imageType,
     required String plate,
+    required String universityId,
   }) async {
     final existing = _uploadedFaceEvidence;
     if (existing != null && existing.plate == plate) {
@@ -459,6 +461,7 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
       final result = await _apiClient.uploadEvidence(
         imageType: imageType,
         plate: plate,
+        universityId: universityId,
         evidence: draft,
       );
       if (mounted) {
@@ -492,11 +495,23 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
       return;
     }
 
+    final selection = ParkingAppScope.of(context).selection;
+    if (selection == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Selecciona universidad, campus y puerta antes de subir el rostro.')),
+      );
+      return;
+    }
+
     setState(() => _uploadingFaceEvidence = true);
     try {
       final result = await _apiClient.uploadEvidence(
         imageType: EvidenceImageType.faceExit,
         plate: plate,
+        universityId: selection.universityId,
         evidence: draft,
       );
       if (!mounted) return;
@@ -589,6 +604,7 @@ class _ExitModeScreenState extends State<ExitModeScreen> {
         final upload = await _apiClient.uploadEvidence(
           imageType: EvidenceImageType.plateExit,
           plate: _pendingPlatePlaceholder,
+          universityId: selection.universityId,
           evidence: draft,
         );
         uploads.add(upload);

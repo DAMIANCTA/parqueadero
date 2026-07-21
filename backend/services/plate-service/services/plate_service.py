@@ -182,7 +182,15 @@ class PlateService:
             self._log_outcome(image, outcome, quality_score=quality.quality_score)
             return outcome
 
-        best = normalized_candidates[0]
+        # Prioriza el primer candidato con formato valido de placa ecuatoriana
+        # (3 letras + 3-4 numeros): el candidato de mayor confianza a veces es
+        # ruido del propio fondo de la placa (ej. el texto "ECUADOR"), no el
+        # codigo real. Si ninguno calza, se usa el de mayor confianza como
+        # antes (para no perder informacion cuando la placa es ilegible).
+        best = next(
+            (candidate for candidate in normalized_candidates if self.validator.is_valid(candidate.text)),
+            normalized_candidates[0],
+        )
         valid_format = self.validator.is_valid(best.text)
         if not valid_format:
             warnings.append("INVALID_PLATE_FORMAT")

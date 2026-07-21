@@ -32,6 +32,7 @@ class GateRuntimeStatusResponse(BaseModel):
     last_event_type: str | None = None
     last_event_payload: str | None = None
     last_presence_at: str | None = None
+    last_presence_mode: str | None = None
     last_command: str | None = None
     last_command_at: str | None = None
     last_updated_at: str | None = None

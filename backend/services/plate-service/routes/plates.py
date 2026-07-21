@@ -1,9 +1,16 @@
-from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi import APIRouter, HTTPException, Request
 from minio.error import S3Error
 from psycopg import OperationalError
+from starlette.datastructures import UploadFile
 
 from config import settings
-from schemas.plates import PlateDetectBatchRequest, PlateDetectBatchResponse, PlateDetectRequest, PlateDetectResponse
+from schemas.plates import (
+    PlateCandidateResponse,
+    PlateDetectBatchRequest,
+    PlateDetectBatchResponse,
+    PlateDetectRequest,
+    PlateDetectResponse,
+)
 from security import require_permissions
 from services.plate_service import PlateService
 
@@ -76,7 +83,10 @@ async def detect_plate(request: Request) -> PlateDetectResponse:
         plate_text=outcome.plate_text,
         confidence=outcome.confidence,
         bounding_box=outcome.bounding_box,
-        candidates=outcome.candidates,
+        candidates=[
+            PlateCandidateResponse(text=candidate.text, confidence=candidate.confidence)
+            for candidate in outcome.candidates
+        ],
         status=outcome.status,
         mode=settings.effective_plate_detection_mode,
         valid_format=outcome.valid_format,

@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     postgres_biometrics_db: str = "parking_biometrics"
     postgres_biometrics_user: str = "biometric_user"
     postgres_biometrics_password: str = "biometric_pass"
+    postgres_core_host: str = "postgres-core"
+    postgres_core_internal_port: int = 5432
+    postgres_core_db: str = "parking_core"
+    postgres_core_user: str = "parking_user"
+    postgres_core_password: str = "parking_pass"
+    temp_user_retention_days: int = 30
+    face_service_fallback_enabled: bool = True
     minio_internal_url: str = "http://minio:9000"
     minio_root_user: str = "minioadmin"
     minio_root_password: str = "minioadmin123"

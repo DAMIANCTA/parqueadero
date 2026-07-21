@@ -1,7 +1,9 @@
-from fastapi import APIRouter, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, Request, Response, UploadFile
 import httpx
 
 from schemas.integration import (
+    AccessHistoryListResponse,
+    EvidenceForensicResponse,
     FaceEnrollMemberRequest,
     FaceProfileListResponse,
     FaceProfileResponse,
@@ -292,6 +294,7 @@ def get_admin_audit_events() -> AdminAuditEventListResponse:
 async def upload_evidence(
     image_type: str = Form(...),
     plate: str = Form(...),
+    university_id: str | None = Form(default=None),
     session_id: str | None = Form(default=None),
     file: UploadFile = File(...),
 ) -> EvidenceUploadResponse:
@@ -302,6 +305,7 @@ async def upload_evidence(
             content_type=file.content_type or "application/octet-stream",
             image_type=image_type,
             plate=plate,
+            university_id=university_id,
             session_id=session_id,
         )
     except httpx.HTTPStatusError as exc:
@@ -309,6 +313,40 @@ async def upload_evidence(
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Parking service unavailable: {exc}") from exc
     return EvidenceUploadResponse(**response)
+
+
+@router.get("/admin/access-history", response_model=AccessHistoryListResponse, dependencies=[require_permissions("history.read")])
+def get_admin_access_history(request: Request) -> AccessHistoryListResponse:
+    try:
+        user = get_request_user(request)
+        response = integration_service.get_parking_history(resolve_university_scope(user, None))
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Access history unavailable: {exc}") from exc
+    return AccessHistoryListResponse(**response)
+
+
+@router.get("/evidence/image/{image_id}", dependencies=[require_permissions("evidence.read")])
+def get_evidence_image(image_id: str) -> Response:
+    try:
+        payload, content_type = integration_service.get_evidence_image_bytes(image_id)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Evidence image unavailable: {exc}") from exc
+    return Response(content=payload, media_type=content_type)
+
+
+@router.get("/evidence/by-plate/{plate_text}", response_model=EvidenceForensicResponse, dependencies=[require_permissions("evidence.read")])
+def get_evidence_by_plate(plate_text: str, include_expired: bool = True) -> EvidenceForensicResponse:
+    try:
+        response = integration_service.get_evidence_by_plate(plate_text, include_expired=include_expired)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Evidence lookup unavailable: {exc}") from exc
+    return EvidenceForensicResponse(**response)
 
 
 @router.post("/plates/detect", response_model=PlateDetectResponse)

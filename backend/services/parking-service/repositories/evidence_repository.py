@@ -21,6 +21,7 @@ class EvidenceRepository:
         image_type: str,
         plate: str,
         hash_sha256: str,
+        university_id: str | None = None,
         content_type: str = "application/octet-stream",
         session_id: str | None = None,
         encrypted: bool = True,
@@ -85,7 +86,7 @@ class EvidenceRepository:
                     """,
                     {
                         "image_id": image_id,
-                        "university_id": UUID(settings.evidence_default_university_id),
+                        "university_id": UUID(university_id) if university_id else UUID(settings.evidence_default_university_id),
                         "session_id": UUID(session_id) if session_id else None,
                         "plate": plate,
                         "bucket": bucket,

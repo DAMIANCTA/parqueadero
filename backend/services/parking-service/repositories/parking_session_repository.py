@@ -16,6 +16,8 @@ class ParkingSessionRepository:
             "person_name": None,
             "role_type": None,
             "vehicle_id": None,
+            "university_id": None,
+            "entry_gate_id": None,
             "entry_face_image_id": "face-visitor-001",
             "entry_face_evidence_id": None,
             "entry_plate_evidence_id": None,
@@ -35,6 +37,8 @@ class ParkingSessionRepository:
             "person_name": None,
             "role_type": None,
             "vehicle_id": None,
+            "university_id": None,
+            "entry_gate_id": None,
             "entry_face_image_id": "face-visitor-002",
             "entry_face_evidence_id": None,
             "entry_plate_evidence_id": None,
@@ -97,7 +101,7 @@ class ParkingSessionRepository:
         entry_plate_evidence_id: str | None = None,
         session_id: str | None = None,
     ) -> dict:
-        del university_id, campus_id, gate_id
+        del campus_id
         normalized_plate = self._normalize_plate(plate_text)
         entry_time = datetime.now(UTC)
         session = {
@@ -111,6 +115,8 @@ class ParkingSessionRepository:
             "person_name": person_name,
             "role_type": role_type,
             "vehicle_id": vehicle_id,
+            "university_id": university_id,
+            "entry_gate_id": gate_id,
             "entry_face_image_id": entry_face_image_id,
             "entry_face_evidence_id": entry_face_evidence_id,
             "entry_plate_evidence_id": entry_plate_evidence_id,
@@ -273,6 +279,34 @@ class ParkingSessionRepository:
                 if session.get("access_type") == "VISITOR":
                     self.active_visitor_sessions[plate] = session.copy()
                 break
+
+    def list_history(self, university_id: str | None = None, limit: int = 100) -> list[dict]:
+        records = [
+            record
+            for record in self.session_records.values()
+            if university_id is None or record.get("university_id") == university_id
+        ]
+        records.sort(
+            key=lambda record: record.get("exit_time") or record.get("entry_time") or datetime.min.replace(tzinfo=UTC),
+            reverse=True,
+        )
+        return [self._history_entry(record) for record in records[:limit]]
+
+    def _history_entry(self, session: dict) -> dict:
+        return {
+            "session_id": session["session_id"],
+            "session_status": session["session_status"],
+            "access_type": session.get("access_type", "VISITOR"),
+            "plate_text": session["plate_text"],
+            "person_name": session.get("person_name"),
+            "payment_status": session["payment_status"],
+            "entry_time": session.get("entry_time").isoformat() if session.get("entry_time") else None,
+            "exit_time": session.get("exit_time").isoformat() if session.get("exit_time") else None,
+            "entry_face_evidence_id": session.get("entry_face_evidence_id"),
+            "entry_plate_evidence_id": session.get("entry_plate_evidence_id"),
+            "exit_face_evidence_id": session.get("exit_face_evidence_id"),
+            "exit_plate_evidence_id": session.get("exit_plate_evidence_id"),
+        }
 
     def _session_summary(self, session: dict) -> dict:
         return {

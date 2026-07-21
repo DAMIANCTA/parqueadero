@@ -1,0 +1,15 @@
+# Dependencias del orquestador de garita (garita_controller.py).
+# Corre en el host (no en Docker): necesita acceso directo a la webcam USB
+# y a la red para hablar con el celular (evidencia de rostro), plate-service,
+# parking-service y el broker MQTT.
+requests>=2.31,<3.0
+paho-mqtt>=2.1,<3.0
+numpy>=1.26,<3.0
+# ultralytics: YOLO local SOLO para el recuadro en vivo, ya no para leer
+# texto (eso lo hace plate-service real por HTTP - ver garita_controller.py).
+ultralytics>=8.2,<9.0
+minio>=7.2,<8.0
+# opencv-python se instala aparte, al final (ver scripts/dev-up.ps1): si se
+# instala junto con ultralytics, pip a veces deja instalado
+# opencv-python-headless (sin soporte de ventanas) y pisa la version normal,
+# rompiendo la vista previa en vivo (cv2.imshow).

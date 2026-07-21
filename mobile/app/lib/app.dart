@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'screens/demo_iot_screen.dart';
 import 'screens/entry_mode_screen.dart';
 import 'screens/exit_mode_screen.dart';
+import 'screens/garita_face_capture_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/mode_hub_screen.dart';
@@ -39,6 +40,7 @@ class _SmartParkingAppState extends State<SmartParkingApp> {
           EntryModeScreen.routeName: (_) => const EntryModeScreen(),
           ExitModeScreen.routeName: (_) => const ExitModeScreen(),
           HistoryScreen.routeName: (_) => const HistoryScreen(),
+          GaritaFisicaScreen.routeName: (_) => const GaritaFisicaScreen(),
           ResultScreen.routeName: (_) => const ResultScreen(),
         },
       ),

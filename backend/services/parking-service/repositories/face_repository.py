@@ -172,6 +172,33 @@ class FaceRepository:
             "model_name": payload.get("model_name", "unknown"),
         }
 
+    def enroll(self, *, university_id: str, person_id: str, image_reference: dict) -> dict:
+        try:
+            return self._post(
+                "/faces/enroll",
+                {
+                    "university_id": university_id,
+                    "person_id": person_id,
+                    "image_reference": image_reference,
+                },
+                permissions=["faces.enroll"],
+            )
+        except httpx.HTTPError as exc:
+            logger.warning("parking-service face_repository enroll_fallback error=%s", exc)
+            return {
+                "enrolled": False,
+                "template_id": None,
+                "image_evidence_id": None,
+                "university_id": university_id,
+                "person_id": person_id,
+                "model_name": "mock-face-model",
+                "embedding_size": 0,
+                "quality_score": 0.0,
+                "mode": "mock-fallback",
+                "image_reference": image_reference,
+                "stored_in_biometric_db": False,
+            }
+
     def _post(self, path: str, payload: dict, *, permissions: list[str]) -> dict:
         with httpx.Client(timeout=settings.face_service_timeout_seconds) as client:
             response = client.post(

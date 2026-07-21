@@ -422,6 +422,14 @@ textarea:focus {
   overflow-x: auto;
 }
 
+.evidence-thumbnail {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: rgba(216, 218, 224, 0.35);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

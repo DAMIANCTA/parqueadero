@@ -23,6 +23,7 @@ ROLE_PERMISSIONS = {
         "dashboard.read",
         "sessions.read",
         "history.read",
+        "evidence.read",
         "audit.read",
         "universities.read",
         "users.read",
@@ -65,6 +66,7 @@ ROLE_PERMISSIONS = {
     "SECURITY": [
         "sessions.read",
         "history.read",
+        "evidence.read",
         "iot.gates.read",
         "iot.gates.open",
         "iot.gates.deny",
@@ -76,6 +78,7 @@ ROLE_PERMISSIONS = {
     "AUDITOR": [
         "dashboard.read",
         "history.read",
+        "evidence.read",
         "audit.read",
         "sessions.read",
         "payments.read",

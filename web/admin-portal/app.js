@@ -17,6 +17,7 @@ const SECTION_DEFINITIONS = {
   cashier: { label: "Caja / Pagos", roles: ["SUPER_ADMIN", "UNIVERSITY_ADMIN", "CASHIER"] },
   active: { label: "Sesiones activas", roles: ["SUPER_ADMIN", "SECURITY"] },
   history: { label: "Historial", roles: ["SUPER_ADMIN", "UNIVERSITY_ADMIN", "CASHIER", "SECURITY", "AUDITOR"] },
+  evidence: { label: "Historial con evidencia", roles: ["SUPER_ADMIN", "UNIVERSITY_ADMIN", "SECURITY", "AUDITOR"] },
   iot: { label: "Garitas / IoT", roles: ["SUPER_ADMIN", "UNIVERSITY_ADMIN", "SECURITY"] },
   members: { label: "Miembros", roles: ["SUPER_ADMIN", "UNIVERSITY_ADMIN", "MEMBER_MANAGER"] },
   vehicles: { label: "Vehiculos", roles: ["SUPER_ADMIN", "UNIVERSITY_ADMIN", "MEMBER_MANAGER"] },
@@ -44,6 +45,7 @@ const state = {
   dashboard: null,
   activeSessions: [],
   sessionHistory: [],
+  accessHistory: [],
   auditEvents: [],
   iot: {
     gateId: localStorage.getItem(STORAGE_KEYS.gateId) || "garita-01",
@@ -136,6 +138,7 @@ async function refreshOverview() {
   if (canAccessSection("dashboard")) jobs.push(loadDashboardSummary());
   if (canAccessSection("active")) jobs.push(loadActiveSessions());
   if (canAccessSection("history") || canAccessSection("cashier")) jobs.push(loadSessionHistory());
+  if (canAccessSection("evidence")) jobs.push(loadAccessHistory());
   if (canAccessSection("audit")) jobs.push(loadAuditEvents());
   if (canAccessSection("iot")) jobs.push(loadIotGateStatus());
   if (canAccessSection("members")) jobs.push(loadMembers());
@@ -163,6 +166,12 @@ async function loadSessionHistory() {
   const response = await fetch(api("/admin/session-history"), { headers: authHeaders() });
   const body = await response.json();
   state.sessionHistory = body.items || [];
+}
+
+async function loadAccessHistory() {
+  const response = await fetch(api("/admin/access-history"), { headers: authHeaders() });
+  const body = await response.json();
+  state.accessHistory = body.items || [];
 }
 
 async function loadAuditEvents() {
@@ -923,6 +932,7 @@ function buildSection() {
   if (state.section === "cashier") return buildCashierSection();
   if (state.section === "active") return buildActiveSection();
   if (state.section === "history") return buildHistorySection();
+  if (state.section === "evidence") return buildAccessHistorySection();
   if (state.section === "iot") return buildIotSection();
   if (state.section === "members") return buildMembersSection();
   if (state.section === "vehicles") return buildVehiclesSection();
@@ -1057,6 +1067,47 @@ function buildHistorySection() {
         )
       : el("p", { className: "empty-state", text: "Todavia no hay sesiones cerradas." }),
   ]);
+}
+
+function buildAccessHistorySection() {
+  return el("section", { className: "table-card" }, [
+    panelHeader(
+      "Historial con evidencia",
+      "Entradas y salidas con foto de rostro/placa asociada, para revision forense.",
+      loadAccessHistory,
+    ),
+    state.accessHistory.length
+      ? table(
+          ["Placa", "Entrada", "Salida", "Estado", "Rostro entrada", "Rostro salida"],
+          state.accessHistory.map((item) => [
+            item.plate_text,
+            formatDateTime(item.entry_time),
+            formatDateTime(item.exit_time),
+            statusPill(item.session_status),
+            evidenceThumbnail(item.entry_face_evidence_id),
+            evidenceThumbnail(item.exit_face_evidence_id),
+          ]),
+        )
+      : el("p", { className: "empty-state", text: "Todavia no hay accesos con evidencia registrada." }),
+  ]);
+}
+
+function evidenceThumbnail(imageId) {
+  if (!imageId) return el("span", { className: "helper", text: "-" });
+  const img = el("img", { className: "evidence-thumbnail", alt: "evidencia" });
+  fetchEvidenceImageUrl(imageId)
+    .then((url) => {
+      if (url) img.src = url;
+    })
+    .catch(() => {});
+  return img;
+}
+
+async function fetchEvidenceImageUrl(imageId) {
+  const response = await fetch(api(`/evidence/image/${imageId}`), { headers: authHeaders() });
+  if (!response.ok) return null;
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
 }
 
 function buildIotSection() {

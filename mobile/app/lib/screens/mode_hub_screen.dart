@@ -5,6 +5,7 @@ import '../widgets/ucepark_brand_header.dart';
 import 'demo_iot_screen.dart';
 import 'entry_mode_screen.dart';
 import 'exit_mode_screen.dart';
+import 'garita_face_capture_screen.dart';
 import 'history_screen.dart';
 import 'login_screen.dart';
 import 'setup_screen.dart';
@@ -78,6 +79,13 @@ class ModeHubScreen extends StatelessWidget {
                 Navigator.of(context).pushNamed(DemoIotScreen.routeName),
             icon: const Icon(Icons.hub),
             label: const Text('Demo IoT'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context)
+                .pushNamed(GaritaFisicaScreen.routeName),
+            icon: const Icon(Icons.sensor_door),
+            label: const Text('Garita fisica (MQTT)'),
           ),
           const SizedBox(height: 12),
           TextButton(

@@ -11,6 +11,7 @@ from repositories.vehicle_authorization_repository import VehicleAuthorizationRe
 from schemas.parking import FaceValidationResult, GateCommand, ParkingEntryRequest, ParkingEntryResponse, SessionData
 from services.evidence_storage_service import EvidenceStorageService
 from services.face_validation_service import FaceValidationService
+from services.temporary_user_service import TemporaryUserService
 
 
 class EntryService:
@@ -24,6 +25,7 @@ class EntryService:
         self.iot_repository = IoTRepository()
         self.payment_repository = PaymentRepository()
         self.evidence_service = EvidenceStorageService()
+        self.temporary_user_service = TemporaryUserService()
 
     def process_entry(self, payload: ParkingEntryRequest) -> ParkingEntryResponse:
         face_mock_id = payload.face_mock_id or payload.face_image_id
@@ -150,6 +152,22 @@ class EntryService:
                 university_id=payload.university_id,
                 plate_text=normalized_plate,
             )
+            try:
+                self.temporary_user_service.register_from_entry(
+                    university_id=payload.university_id,
+                    plate_text=normalized_plate,
+                    session_id=session_record["session_id"],
+                    gate_id=payload.gate_id,
+                    face_evidence_id=face_image_id,
+                    face_fallback_id=face_mock_id,
+                    plate_evidence_id=plate_image_id,
+                    liveness_score=payload.liveness_score,
+                )
+            except Exception as exc:  # noqa: BLE001 - registro forense best-effort
+                print(
+                    "parking-service temporary_user_register_failed "
+                    f"session_id={session_record['session_id']} plate={normalized_plate} error={exc}"
+                )
         else:
             self.payment_repository.sync_member_session(
                 session_id=session_record["session_id"],

@@ -32,4 +32,27 @@ class AppConfig {
     final normalized = value?.trim() ?? '';
     _runtimeApiBaseUrl = normalized.isEmpty ? null : normalized;
   }
+
+  static String? _runtimeMqttHost;
+  static int _runtimeMqttPort = 1883;
+
+  static String get _apiHost => Uri.tryParse(apiBaseUrl)?.host ?? '';
+
+  /// Por defecto reutiliza el host de [apiBaseUrl] (el broker MQTT de la
+  /// garita fisica corre junto al backend), asi el operador no tiene que
+  /// escribir la IP dos veces salvo que el broker viva en otra maquina.
+  static String get mqttHost => _runtimeMqttHost ?? _apiHost;
+
+  static int get mqttPort => _runtimeMqttPort;
+
+  static bool get hasMqttHost => mqttHost.isNotEmpty;
+
+  static void setMqttHost(String? value) {
+    final normalized = value?.trim() ?? '';
+    _runtimeMqttHost = normalized.isEmpty ? null : normalized;
+  }
+
+  static void setMqttPort(int value) {
+    _runtimeMqttPort = value;
+  }
 }

@@ -21,6 +21,7 @@ class EvidenceStorageService:
         content_type: str,
         image_type: str,
         plate: str,
+        university_id: str | None = None,
         session_id: str | None = None,
     ) -> dict:
         normalized_plate = plate.strip().upper().replace(" ", "")
@@ -45,6 +46,7 @@ class EvidenceStorageService:
             image_type=image_type,
             plate=normalized_plate,
             hash_sha256=hash_sha256,
+            university_id=university_id,
             content_type=content_type,
             session_id=session_id,
         )
@@ -53,6 +55,16 @@ class EvidenceStorageService:
         if not image_id:
             return
         self.repository.link_to_session(image_id=image_id, session_id=session_id, plate=plate)
+
+    def get_image_bytes(self, image_id: str) -> tuple[bytes, str] | None:
+        evidence = self.repository.get(image_id)
+        if evidence is None:
+            return None
+        payload = self.storage.download_object(
+            bucket=evidence["bucket"],
+            object_name=evidence["object_name"],
+        )
+        return payload, "image/jpeg"
 
     def _resolve_bucket(self, image_type: str) -> str:
         if image_type.startswith("face_"):

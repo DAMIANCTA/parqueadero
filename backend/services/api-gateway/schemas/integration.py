@@ -581,6 +581,50 @@ class AdminSessionListResponse(BaseModel):
     items: list[AdminSessionItemResponse]
 
 
+class AccessHistoryItemResponse(BaseModel):
+    session_id: str
+    session_status: str
+    access_type: str
+    plate_text: str
+    person_name: str | None = None
+    payment_status: str
+    entry_time: str | None = None
+    exit_time: str | None = None
+    entry_face_evidence_id: str | None = None
+    entry_plate_evidence_id: str | None = None
+    exit_face_evidence_id: str | None = None
+    exit_plate_evidence_id: str | None = None
+
+
+class AccessHistoryListResponse(BaseModel):
+    total: int
+    items: list[AccessHistoryItemResponse]
+
+
+class TemporaryUserRecordResponse(BaseModel):
+    id: str
+    university_id: str
+    plate: str
+    full_name: str | None = None
+    face_template_id: str | None = None
+    entry_face_evidence_id: str | None = None
+    entry_plate_evidence_id: str | None = None
+    entry_session_id: str | None = None
+    entry_gate_id: str | None = None
+    face_model_name: str | None = None
+    liveness_score: float | None = None
+    metadata: dict
+    status: str
+    created_at: str
+    expires_at: str
+
+
+class EvidenceForensicResponse(BaseModel):
+    plate_text: str
+    count: int
+    temporary_users: list[TemporaryUserRecordResponse]
+
+
 class AdminAuditEventItemResponse(BaseModel):
     id: str | None = None
     timestamp: int | None = None
