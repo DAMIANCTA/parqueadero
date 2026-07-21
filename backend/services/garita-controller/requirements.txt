@@ -1,0 +1,17 @@
+# Dependencias de garita_controller.py, ahora empaquetado como microservicio
+# (ver Dockerfile) que corre junto al resto del backend en Docker Compose.
+requests>=2.31,<3.0
+paho-mqtt>=2.1,<3.0
+numpy>=1.26,<3.0
+# ultralytics: YOLO local SOLO para el recuadro en vivo, ya no para leer
+# texto (eso lo hace plate-service real por HTTP - ver garita_controller.py).
+ultralytics>=8.2,<9.0
+minio>=7.2,<8.0
+# Sin ventana local (cv2.imshow) en el camino principal, opencv-python-headless
+# alcanza y evita arrastrar Qt/GTK al contenedor. La vista en vivo se sirve
+# por HTTP (ver build_app en garita_controller.py).
+opencv-python-headless>=4.10,<5.0
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.32,<1.0
+# Requerido por FastAPI para parsear el formulario de POST /camera-source.
+python-multipart>=0.0.9,<1.0

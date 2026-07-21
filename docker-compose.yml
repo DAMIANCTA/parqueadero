@@ -146,6 +146,17 @@ services:
       - postgres-biometrics
       - minio
 
+  garita-controller:
+    build: ./backend/services/garita-controller
+    container_name: parking-garita-controller
+    env_file: .env
+    ports:
+      - "${GARITA_CONTROLLER_PORT}:8010"
+    depends_on:
+      - mosquitto
+      - plate-service
+      - parking-service
+
   payment-service:
     build: ./backend/services/payment-service
     container_name: parking-payment-service

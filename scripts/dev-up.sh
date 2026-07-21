@@ -1,20 +1,11 @@
 #!/usr/bin/env bash
 # Equivalente a dev-up.ps1 para Mac/Linux: arranca todo el proyecto con un
-# solo comando, el backend (Docker Compose) y garita_controller.py (el
-# orquestador de la garita fisica).
-#
-# garita_controller.py NO corre dentro de Docker a proposito: Docker Desktop
-# (Mac y Windows por igual) corre en una VM y no tiene acceso directo a la
-# webcam del host sin pasos extra fragiles. Este script simplemente
-# automatiza lanzar ambas partes en orden.
+# solo comando. Docker Compose levanta el backend completo, incluido
+# garita-controller (el orquestador de la garita fisica), que ahora corre
+# como un microservicio mas del stack (usa una camara IP para la deteccion
+# de placa, configurable en .env via PLATE_CAMERA_SOURCE).
 #
 # Uso: ./scripts/dev-up.sh
-# Cierra la ventana de vista previa con ESC para terminar garita_controller.py
-# (el stack de Docker se queda corriendo; usa "docker compose down" aparte).
-#
-# Nota macOS: la primera vez que corra, macOS va a pedir permiso de camara
-# para Terminal/Python (Configuracion del Sistema > Privacidad y seguridad >
-# Camara) - si no aparece el prompt, actívalo ahi a mano y vuelve a correr.
 
 set -euo pipefail
 
@@ -28,7 +19,7 @@ else
     echo ".env ya existe, no se toca (para no perder ajustes ya hechos)."
 fi
 
-echo "Levantando Docker Compose (backend completo)..."
+echo "Levantando Docker Compose (backend completo, incluye garita-controller)..."
 docker compose up -d --build
 
 echo "Esperando a que parking-service responda..."
@@ -44,16 +35,10 @@ done
 if [ "$ready" = true ]; then
     echo "Backend listo."
 else
-    echo "AVISO: parking-service no respondio en 120s; se intenta lanzar garita_controller.py de todas formas (revisa 'docker compose logs' si falla)." >&2
+    echo "AVISO: parking-service no respondio en 120s (revisa 'docker compose logs')." >&2
 fi
 
-cd "$root/iot/esp32"
-echo "Instalando dependencias de Python (si faltan)..."
-python3 -m pip install -r requirements.txt --quiet
-# opencv-python se instala aparte: si se instala junto con ultralytics, pip a
-# veces deja opencv-python-headless (sin ventanas) y rompe la vista previa
-# en vivo (cv2.imshow).
-python3 -m pip install opencv-python --quiet
-
-echo "Lanzando garita_controller.py (ventana de vista previa; ESC para cerrarla)..."
-python3 garita_controller.py
+garita_port="$(grep -m1 '^GARITA_CONTROLLER_PORT=' .env | cut -d= -f2)"
+garita_port="${garita_port:-8010}"
+echo "Vista en vivo de la garita: http://localhost:${garita_port}/"
+echo "Configura PLATE_CAMERA_SOURCE en .env con la URL de tu camara IP (rtsp://... o http://...) y 'docker compose up -d --build garita-controller' de nuevo si la cambias."
