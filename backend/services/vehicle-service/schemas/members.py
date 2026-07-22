@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-RoleType = Literal["STUDENT", "TEACHER", "STAFF"]
+RoleType = Literal["STUDENT", "TEACHER", "STAFF", "DRIVER"]
 EntityStatus = Literal["ACTIVE", "INACTIVE"]
 PermitStatus = Literal["VALID", "EXPIRED", "SUSPENDED"]
 AccessType = Literal["MEMBER", "VISITOR"]
@@ -18,6 +18,7 @@ class MemberCreateRequest(BaseModel):
     email: str = Field(min_length=5, max_length=150)
     role_type: RoleType
     status: EntityStatus = "ACTIVE"
+    user_id: str | None = None
 
 
 class MemberResponse(BaseModel):
@@ -31,6 +32,7 @@ class MemberResponse(BaseModel):
     status: EntityStatus
     created_at: datetime
     updated_at: datetime
+    user_id: str | None = None
 
 
 class MemberListResponse(BaseModel):
@@ -183,3 +185,15 @@ class VehicleLookupResponse(BaseModel):
     message: str
     vehicle: VehicleResponse | None = None
     authorized_people: list[MemberResponse] = Field(default_factory=list)
+
+
+class RegisterOwnedVehicleRequest(BaseModel):
+    user_id: str
+    full_name: str = Field(min_length=3, max_length=150)
+    document_number: str | None = None
+    phone: str | None = None
+    university_id: str
+    plate_text: str = Field(min_length=3, max_length=20)
+    brand: str = Field(min_length=1, max_length=100)
+    model: str = Field(min_length=1, max_length=100)
+    color: str = Field(min_length=1, max_length=50)

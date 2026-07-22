@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -77,3 +77,20 @@ class UserResponse(BaseModel):
 class UserListResponse(BaseModel):
     total: int
     items: list[UserResponse]
+
+
+class DriverRegisterRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=100)
+    password: str = Field(min_length=6, max_length=100)
+    confirm_password: str = Field(min_length=6, max_length=100)
+    full_name: str = Field(min_length=3, max_length=160)
+    document_number: str = Field(min_length=5, max_length=30)
+    phone: str = Field(min_length=7, max_length=20)
+    email: str | None = Field(default=None, max_length=160)
+    university_id: str | None = None
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> "DriverRegisterRequest":
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self

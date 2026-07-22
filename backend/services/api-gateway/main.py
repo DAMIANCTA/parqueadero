@@ -35,6 +35,7 @@ app.add_middleware(
         "/version",
         "/auth/login",
         "/auth/token",
+        "/auth/register",
         "/parking/entry",
         "/parking/exit",
         "/demo/open-gate",

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request
 
 from schemas.auth import (
     CurrentUserResponse,
+    DriverRegisterRequest,
     LoginRequest,
     TokenResponse,
     UniversityCreateRequest,
@@ -25,6 +26,12 @@ auth_service = AuthService()
 @router.post("/api/v1/auth/token", response_model=TokenResponse)
 def issue_token(payload: LoginRequest) -> TokenResponse:
     return auth_service.issue_token(payload)
+
+
+@router.post("/auth/register", response_model=TokenResponse)
+@router.post("/api/v1/auth/register", response_model=TokenResponse)
+def register_driver(payload: DriverRegisterRequest) -> TokenResponse:
+    return auth_service.register_driver(payload)
 
 
 @router.get("/auth/me", response_model=CurrentUserResponse)

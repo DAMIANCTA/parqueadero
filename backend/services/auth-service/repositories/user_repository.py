@@ -113,6 +113,8 @@ class UserRepository:
             "password_hash": self.hash_password(username, payload["password"]),
             "full_name": payload["full_name"].strip(),
             "email": payload.get("email"),
+            "document_number": payload.get("document_number"),
+            "phone": payload.get("phone"),
             "role": role,
             "roles": [role],
             "university_id": university_id,

@@ -642,3 +642,26 @@ class AdminAuditEventItemResponse(BaseModel):
 class AdminAuditEventListResponse(BaseModel):
     total: int
     items: list[AdminAuditEventItemResponse]
+
+
+class DriverRegisterRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=100)
+    password: str = Field(min_length=6, max_length=100)
+    confirm_password: str = Field(min_length=6, max_length=100)
+    full_name: str = Field(min_length=3, max_length=160)
+    document_number: str = Field(min_length=5, max_length=30)
+    phone: str = Field(min_length=7, max_length=20)
+    email: str | None = Field(default=None, max_length=160)
+    university_id: str | None = None
+
+
+class MyVehicleCreateRequest(BaseModel):
+    plate_text: str = Field(min_length=3, max_length=20)
+    brand: str = Field(min_length=1, max_length=100)
+    model: str = Field(min_length=1, max_length=100)
+    color: str = Field(min_length=1, max_length=50)
+
+
+class ActiveSessionResponse(BaseModel):
+    plate_text: str
+    active: bool

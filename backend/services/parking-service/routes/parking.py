@@ -46,6 +46,10 @@ def get_active_session(plate_text: str) -> ActiveSessionResponse:
     response_model=ParkingHistoryResponse,
     dependencies=[require_permissions("parking.entry")],
 )
-def get_history(university_id: str | None = Query(default=None), limit: int = Query(default=100, le=500)) -> ParkingHistoryResponse:
-    items = parking_session_repository.list_history(university_id=university_id, limit=limit)
+def get_history(
+    university_id: str | None = Query(default=None),
+    plate_text: str | None = Query(default=None),
+    limit: int = Query(default=100, le=500),
+) -> ParkingHistoryResponse:
+    items = parking_session_repository.list_history(university_id=university_id, limit=limit, plate_text=plate_text)
     return ParkingHistoryResponse(total=len(items), items=items)

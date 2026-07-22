@@ -7,6 +7,7 @@ from psycopg import connect
 
 from config import settings
 from schemas.integration import (
+    DriverRegisterRequest,
     FaceEnrollMemberRequest,
     FaceProfileListResponse,
     CashierPaymentRegistrationRequest,
@@ -14,6 +15,7 @@ from schemas.integration import (
     LoginRequest,
     MemberAccessValidationRequest,
     MemberCreateRequest,
+    MyVehicleCreateRequest,
     ParkingEntryRequest,
     ParkingExitRequest,
     MonthlyPermitCreateRequest,
@@ -281,6 +283,46 @@ class IntegrationService:
     def list_vehicles(self, university_id: str | None = None) -> dict:
         suffix = f"?university_id={university_id}" if university_id else ""
         return self._get_json(self.targets["vehicle"], f"/vehicles{suffix}", permissions=["vehicles.read"])
+
+    def register_driver(self, payload: DriverRegisterRequest) -> dict:
+        return self._post_json_without_token(self.targets["auth"], "/auth/register", payload.model_dump())
+
+    def list_my_vehicles(self, user_id: str) -> dict:
+        return self._get_json(
+            self.targets["vehicle"],
+            f"/members/by-user/{user_id}/vehicles",
+            permissions=["members.read", "vehicles.read"],
+        )
+
+    def register_my_vehicle(self, user: dict, payload: MyVehicleCreateRequest, university_id: str) -> dict:
+        body = {
+            "user_id": user["sub"],
+            "full_name": user.get("full_name") or user["username"],
+            "document_number": None,
+            "phone": None,
+            "university_id": university_id,
+            **payload.model_dump(),
+        }
+        return self._post_json(
+            self.targets["vehicle"],
+            "/vehicles/register-owned",
+            body,
+            permissions=["vehicles.write", "members.write"],
+        )
+
+    def get_my_active_session(self, plate_text: str) -> dict:
+        return self._get_json(
+            self.targets["parking"],
+            f"/parking/active-session/{plate_text}",
+            permissions=["parking.entry"],
+        )
+
+    def get_my_history(self, plate_text: str, limit: int = 100) -> dict:
+        return self._get_json(
+            self.targets["parking"],
+            f"/parking/history?plate_text={plate_text}&limit={limit}",
+            permissions=["parking.entry"],
+        )
 
     def get_vehicle_by_plate(self, plate_text: str) -> dict:
         return self._get_json(self.targets["vehicle"], f"/vehicles/by-plate/{plate_text}", permissions=["vehicles.read"])

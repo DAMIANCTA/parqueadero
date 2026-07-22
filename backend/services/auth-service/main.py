@@ -37,6 +37,8 @@ app.add_middleware(
         "/api/v1/auth/login",
         "/auth/token",
         "/api/v1/auth/token",
+        "/auth/register",
+        "/api/v1/auth/register",
     },
 )
 app.add_middleware(

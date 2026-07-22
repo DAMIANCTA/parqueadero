@@ -257,22 +257,39 @@ class MemberRepository:
             "email": payload["email"],
             "role_type": payload["role_type"],
             "status": payload.get("status", "ACTIVE"),
+            "user_id": payload.get("user_id"),
             "created_at": now,
             "updated_at": now,
         }
         self.members[member_id] = record
         return deepcopy(record)
 
-    def list_members(self, university_id: str | None = None) -> list[dict]:
+    def list_members(self, university_id: str | None = None, user_id: str | None = None) -> list[dict]:
         items = [deepcopy(item) for item in self.members.values()]
         if university_id:
             items = [item for item in items if item["university_id"] == university_id]
+        if user_id:
+            items = [item for item in items if item.get("user_id") == user_id]
         items.sort(key=lambda item: item["full_name"])
         return items
 
     def get_member(self, member_id: str) -> dict | None:
         item = self.members.get(member_id)
         return deepcopy(item) if item else None
+
+    def get_member_by_user_id(self, user_id: str) -> dict | None:
+        for item in self.members.values():
+            if item.get("user_id") == user_id:
+                return deepcopy(item)
+        return None
+
+    def get_vehicles_for_person(self, person_id: str) -> list[dict]:
+        vehicle_ids = {
+            auth["vehicle_id"] for auth in self.authorizations.values() if auth["person_id"] == person_id
+        }
+        items = [deepcopy(self.vehicles[vid]) for vid in vehicle_ids if vid in self.vehicles]
+        items.sort(key=lambda item: item["plate_text"])
+        return items
 
     def create_vehicle(self, payload: dict) -> dict:
         now = datetime.now(UTC)

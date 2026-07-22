@@ -280,11 +280,18 @@ class ParkingSessionRepository:
                     self.active_visitor_sessions[plate] = session.copy()
                 break
 
-    def list_history(self, university_id: str | None = None, limit: int = 100) -> list[dict]:
+    def list_history(
+        self,
+        university_id: str | None = None,
+        limit: int = 100,
+        plate_text: str | None = None,
+    ) -> list[dict]:
+        normalized_plate = self._normalize_plate(plate_text) if plate_text else None
         records = [
             record
             for record in self.session_records.values()
             if university_id is None or record.get("university_id") == university_id
+            if normalized_plate is None or record.get("plate_text") == normalized_plate
         ]
         records.sort(
             key=lambda record: record.get("exit_time") or record.get("entry_time") or datetime.min.replace(tzinfo=UTC),

@@ -14,6 +14,7 @@ from schemas.members import (
     MonthlyPermitListResponse,
     MonthlyPermitResponse,
     PermitLookupResponse,
+    RegisterOwnedVehicleRequest,
     VehicleAuthorizationRequest,
     VehicleAuthorizationResponse,
     VehicleCreateRequest,
@@ -52,6 +53,24 @@ def list_vehicles(university_id: str | None = None) -> VehicleListResponse:
 @router.get("/vehicles/by-plate/{plate_text}", response_model=VehicleLookupResponse, dependencies=[require_permissions("vehicles.read")])
 def get_vehicle_by_plate(plate_text: str) -> VehicleLookupResponse:
     return member_service.get_vehicle_by_plate(plate_text)
+
+
+@router.get(
+    "/members/by-user/{user_id}/vehicles",
+    response_model=VehicleListResponse,
+    dependencies=[require_permissions("members.read", "vehicles.read")],
+)
+def list_vehicles_by_user(user_id: str) -> VehicleListResponse:
+    return member_service.list_vehicles_by_user(user_id)
+
+
+@router.post(
+    "/vehicles/register-owned",
+    response_model=VehicleResponse,
+    dependencies=[require_permissions("vehicles.write", "members.write")],
+)
+def register_owned_vehicle(payload: RegisterOwnedVehicleRequest) -> VehicleResponse:
+    return member_service.register_owned_vehicle(payload)
 
 
 @router.post("/members/{member_id}/faces/enroll", response_model=FaceProfileResponse, dependencies=[require_permissions("faces.enroll", "members.write")])

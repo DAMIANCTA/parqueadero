@@ -19,6 +19,7 @@ from schemas.members import (
     MonthlyPermitListResponse,
     MonthlyPermitResponse,
     PermitLookupResponse,
+    RegisterOwnedVehicleRequest,
     VehicleAuthorizationRequest,
     VehicleAuthorizationResponse,
     VehicleCreateRequest,
@@ -60,6 +61,43 @@ class MemberAccessService:
     def list_vehicles(self, university_id: str | None = None) -> VehicleListResponse:
         items = [VehicleResponse(**item) for item in self.repository.list_vehicles(university_id)]
         return VehicleListResponse(total=len(items), items=items)
+
+    def list_vehicles_by_user(self, user_id: str) -> VehicleListResponse:
+        member = self.repository.get_member_by_user_id(user_id)
+        if member is None:
+            return VehicleListResponse(total=0, items=[])
+        items = [VehicleResponse(**item) for item in self.repository.get_vehicles_for_person(member["id"])]
+        return VehicleListResponse(total=len(items), items=items)
+
+    def register_owned_vehicle(self, payload: RegisterOwnedVehicleRequest) -> VehicleResponse:
+        if self.repository.get_vehicle_by_plate(payload.plate_text):
+            raise HTTPException(status_code=409, detail="Vehicle plate is already registered")
+
+        member = self.repository.get_member_by_user_id(payload.user_id)
+        if member is None:
+            member = self.repository.create_member(
+                {
+                    "university_id": payload.university_id,
+                    "document_id": payload.document_number or payload.user_id,
+                    "institutional_id": payload.document_number or payload.user_id,
+                    "full_name": payload.full_name,
+                    "email": f"{payload.user_id}@drivers.local",
+                    "role_type": "DRIVER",
+                    "user_id": payload.user_id,
+                }
+            )
+
+        vehicle = self.repository.create_vehicle(
+            {
+                "university_id": payload.university_id,
+                "plate_text": payload.plate_text,
+                "brand": payload.brand,
+                "model": payload.model,
+                "color": payload.color,
+            }
+        )
+        self.repository.authorize_person(vehicle["id"], member["id"], is_owner=True)
+        return VehicleResponse(**vehicle)
 
     def get_vehicle_by_plate(self, plate_text: str) -> VehicleLookupResponse:
         vehicle = self.repository.get_vehicle_by_plate(plate_text)

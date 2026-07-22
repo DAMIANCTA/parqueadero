@@ -5,6 +5,7 @@ from repositories.user_repository import UserRepository
 from schemas.auth import (
     AuthenticatedUserResponse,
     CurrentUserResponse,
+    DriverRegisterRequest,
     LoginRequest,
     TokenResponse,
     UniversityCreateRequest,
@@ -83,6 +84,10 @@ ROLE_PERMISSIONS = {
         "sessions.read",
         "payments.read",
     ],
+    "DRIVER": [
+        "vehicles.self_manage",
+        "parking.self_read",
+    ],
 }
 
 
@@ -104,6 +109,7 @@ class AuthService:
             claims={
                 "sub": user["id"],
                 "username": user["username"],
+                "full_name": user["full_name"],
                 "roles": user["roles"],
                 "permissions": permissions,
                 "university_id": user["university_id"],
@@ -190,6 +196,29 @@ class AuthService:
             status_code = 404 if "not found" in detail.lower() else 409
             raise HTTPException(status_code=status_code, detail=detail) from exc
         return self._to_user_response(record)
+
+    def register_driver(self, payload: DriverRegisterRequest) -> TokenResponse:
+        university_id = payload.university_id or self.repository.UCE_ID
+        create_payload = {
+            "username": payload.username,
+            "password": payload.password,
+            "full_name": payload.full_name,
+            "email": payload.email,
+            "role": "DRIVER",
+            "university_id": university_id,
+            "document_number": payload.document_number,
+            "phone": payload.phone,
+        }
+        try:
+            # actor_role="SUPER_ADMIN" solo habilita el passthrough del
+            # university_id elegido por el propio registro publico; el rol
+            # queda fijo en "DRIVER" arriba, sin importar el actor.
+            self.repository.create_user(create_payload, actor_role="SUPER_ADMIN", actor_university_id=None)
+        except ValueError as exc:
+            detail = str(exc)
+            status_code = 404 if "not found" in detail.lower() else 409
+            raise HTTPException(status_code=status_code, detail=detail) from exc
+        return self.issue_token(LoginRequest(username=payload.username, password=payload.password))
 
     def _permissions_for_roles(self, roles: list[str]) -> list[str]:
         permissions: set[str] = set()
