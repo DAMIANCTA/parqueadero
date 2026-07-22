@@ -65,6 +65,13 @@ class FaceDetectResponse(FaceValidationSummary):
     stored_in_biometric_db: bool = True
 
 
+class FaceLiveCheckResponse(BaseModel):
+    detected: bool
+    centered: bool
+    quality_score: float | None = Field(default=None, ge=0, le=1)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class FaceEnrollRequest(BaseModel):
     university_id: str
     person_id: str

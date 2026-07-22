@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-PersonType = Literal["visitor", "student", "teacher", "employee"]
+PersonType = Literal["visitor", "student", "teacher", "employee", "driver"]
 AccessType = Literal["VISITOR", "MEMBER"]
 
 

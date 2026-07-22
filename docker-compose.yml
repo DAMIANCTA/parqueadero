@@ -98,6 +98,8 @@ services:
     env_file: .env
     ports:
       - "${AUTH_SERVICE_PORT}:8000"
+    depends_on:
+      - postgres-core
 
   university-service:
     build: ./backend/services/university-service

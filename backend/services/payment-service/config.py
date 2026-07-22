@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     audit_enabled: bool = True
     audit_service_url: str = "http://audit-service:8000"
     audit_internal_key: str = ""
+    postgres_core_host: str = "postgres-core"
+    postgres_core_internal_port: int = 5432
+    postgres_core_db: str = "parking_core"
+    postgres_core_user: str = "parking_user"
+    postgres_core_password: str = "parking_pass"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

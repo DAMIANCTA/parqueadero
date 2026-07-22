@@ -21,6 +21,7 @@ from schemas.members import (
     VehicleListResponse,
     VehicleLookupResponse,
     VehicleResponse,
+    VehicleUpdateRequest,
 )
 from security import require_permissions, verify_internal_audit_key
 from services.member_access_service import MemberAccessService
@@ -55,6 +56,11 @@ def get_vehicle_by_plate(plate_text: str) -> VehicleLookupResponse:
     return member_service.get_vehicle_by_plate(plate_text)
 
 
+@router.patch("/vehicles/{vehicle_id}", response_model=VehicleResponse, dependencies=[require_permissions("vehicles.write")])
+def update_vehicle(vehicle_id: str, payload: VehicleUpdateRequest) -> VehicleResponse:
+    return member_service.update_vehicle(vehicle_id, payload)
+
+
 @router.get(
     "/members/by-user/{user_id}/vehicles",
     response_model=VehicleListResponse,
@@ -62,6 +68,15 @@ def get_vehicle_by_plate(plate_text: str) -> VehicleLookupResponse:
 )
 def list_vehicles_by_user(user_id: str) -> VehicleListResponse:
     return member_service.list_vehicles_by_user(user_id)
+
+
+@router.get(
+    "/members/by-user/{user_id}",
+    response_model=MemberResponse,
+    dependencies=[require_permissions("members.read")],
+)
+def get_member_by_user(user_id: str) -> MemberResponse:
+    return member_service.get_member_by_user(user_id)
 
 
 @router.post(

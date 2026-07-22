@@ -11,6 +11,8 @@ class AuthenticatedUserResponse(BaseModel):
     username: str
     full_name: str
     email: str | None = None
+    document_number: str | None = None
+    phone: str | None = None
     role: str
     roles: list[str]
     university_id: str | None = None
@@ -94,3 +96,19 @@ class DriverRegisterRequest(BaseModel):
         if self.password != self.confirm_password:
             raise ValueError("Passwords do not match")
         return self
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=6, max_length=100)
+    new_password: str = Field(min_length=6, max_length=100)
+    confirm_new_password: str = Field(min_length=6, max_length=100)
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> "ChangePasswordRequest":
+        if self.new_password != self.confirm_new_password:
+            raise ValueError("Passwords do not match")
+        return self
+
+
+class ChangePasswordResponse(BaseModel):
+    changed: bool

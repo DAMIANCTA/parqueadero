@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-ImageType = Literal["face_entry", "face_exit", "plate_entry", "plate_exit", "incident_capture"]
+ImageType = Literal["face_entry", "face_exit", "plate_entry", "plate_exit", "incident_capture", "face_enrollment"]
 
 
 class EvidenceUploadResponse(BaseModel):

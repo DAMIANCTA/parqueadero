@@ -33,6 +33,7 @@ class MemberResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     user_id: str | None = None
+    has_face_profile: bool = False
 
 
 class MemberListResponse(BaseModel):
@@ -47,6 +48,13 @@ class VehicleCreateRequest(BaseModel):
     model: str = Field(min_length=1, max_length=100)
     color: str = Field(min_length=1, max_length=50)
     status: EntityStatus = "ACTIVE"
+
+
+class VehicleUpdateRequest(BaseModel):
+    plate_text: str | None = Field(default=None, min_length=3, max_length=20)
+    brand: str | None = Field(default=None, min_length=1, max_length=100)
+    model: str | None = Field(default=None, min_length=1, max_length=100)
+    color: str | None = Field(default=None, min_length=1, max_length=50)
 
 
 class VehicleResponse(BaseModel):

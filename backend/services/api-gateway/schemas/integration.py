@@ -4,7 +4,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, Field
 
 
-PersonType = Literal["visitor", "student", "teacher", "employee"]
+PersonType = Literal["visitor", "student", "teacher", "employee", "driver"]
 
 
 class ParkingEntryRequest(BaseModel):
@@ -317,6 +317,8 @@ class MemberResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    user_id: str | None = None
+    has_face_profile: bool = False
 
 
 class MemberListResponse(BaseModel):
@@ -481,6 +483,8 @@ class AuthenticatedUserResponse(BaseModel):
     username: str
     full_name: str
     email: str | None = None
+    document_number: str | None = None
+    phone: str | None = None
     role: str
     roles: list[str]
     permissions: list[str]
@@ -500,6 +504,16 @@ class GatewayTokenResponse(BaseModel):
 
 class CurrentUserResponse(AuthenticatedUserResponse):
     sub: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=6, max_length=100)
+    new_password: str = Field(min_length=6, max_length=100)
+    confirm_new_password: str = Field(min_length=6, max_length=100)
+
+
+class ChangePasswordResponse(BaseModel):
+    changed: bool
 
 
 class UniversityCreateRequest(BaseModel):
@@ -662,6 +676,20 @@ class MyVehicleCreateRequest(BaseModel):
     color: str = Field(min_length=1, max_length=50)
 
 
+class MyVehicleUpdateRequest(BaseModel):
+    plate_text: str | None = Field(default=None, min_length=3, max_length=20)
+    brand: str | None = Field(default=None, min_length=1, max_length=100)
+    model: str | None = Field(default=None, min_length=1, max_length=100)
+    color: str | None = Field(default=None, min_length=1, max_length=50)
+
+
 class ActiveSessionResponse(BaseModel):
     plate_text: str
     active: bool
+
+
+class FaceLiveCheckResponse(BaseModel):
+    detected: bool
+    centered: bool
+    quality_score: float | None = None
+    warnings: list[str] = Field(default_factory=list)

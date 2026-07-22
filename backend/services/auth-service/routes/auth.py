@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Request
 
 from schemas.auth import (
+    ChangePasswordRequest,
+    ChangePasswordResponse,
     CurrentUserResponse,
     DriverRegisterRequest,
     LoginRequest,
@@ -38,6 +40,12 @@ def register_driver(payload: DriverRegisterRequest) -> TokenResponse:
 @router.get("/api/v1/auth/me", response_model=CurrentUserResponse)
 def me(request: Request) -> CurrentUserResponse:
     return auth_service.current_user(get_request_user(request))
+
+
+@router.post("/auth/change-password", response_model=ChangePasswordResponse)
+@router.post("/api/v1/auth/change-password", response_model=ChangePasswordResponse)
+def change_password(request: Request, payload: ChangePasswordRequest) -> ChangePasswordResponse:
+    return auth_service.change_password(get_request_user(request), payload)
 
 
 @router.get(

@@ -1,120 +1,117 @@
-from copy import deepcopy
-from datetime import datetime, timedelta, UTC
+import logging
+from datetime import UTC, datetime, timedelta
+from time import sleep
+from typing import Any
+from uuid import UUID
+
+from psycopg import OperationalError, connect
+from psycopg.rows import dict_row
 
 from config import settings
 
 
+logger = logging.getLogger(__name__)
+
+
+def _app_session_status(db_status: str) -> str:
+    return "INSIDE" if db_status == "open" else "OUTSIDE"
+
+
+def _app_access_type(session_type: str) -> str:
+    return "MEMBER" if session_type == "internal" else "VISITOR"
+
+
+_DEMO_PAID_SESSION_ID = "66666666-6666-6666-6666-666666666601"
+
+
 class PaymentRepository:
     UCE_ID = "11111111-1111-1111-1111-111111111111"
-    INITIAL_SESSIONS = {
-        "session-visitor-paid-001": {
-            "session_id": "session-visitor-paid-001",
-            "university_id": UCE_ID,
-            "plate_text": "VIS1234",
-            "qr_code": "QR-VIS1234",
-            "entry_time": datetime.now(UTC) - timedelta(hours=2, minutes=10),
-            "exit_time": None,
-            "session_status": "INSIDE",
-            "access_type": "VISITOR",
-            "payment_status": "PAID",
-            "cashier_user_id": "cashier-001",
-            "amount": 2.25,
-            "paid_amount": 2.25,
-            "payment_method": "cash",
-            "paid_at": datetime.now(UTC) - timedelta(minutes=4),
-            "payment_valid_until": datetime.now(UTC) + timedelta(minutes=11),
-            "receipt_number": "REC-20260707-0001",
-            "notes": "Pago registrado antes de salida",
-            "currency": "USD",
-        },
-        "session-visitor-pending-001": {
-            "session_id": "session-visitor-pending-001",
-            "university_id": UCE_ID,
-            "plate_text": "VISPEND",
-            "qr_code": "QR-VISPEND",
-            "entry_time": datetime.now(UTC) - timedelta(minutes=35),
-            "exit_time": None,
-            "session_status": "INSIDE",
-            "access_type": "VISITOR",
-            "payment_status": "PENDING",
-            "cashier_user_id": None,
-            "amount": None,
-            "paid_amount": None,
-            "payment_method": None,
-            "paid_at": None,
-            "payment_valid_until": None,
-            "receipt_number": None,
-            "notes": None,
-            "currency": "USD",
-        },
-        "session-visitor-done-001": {
-            "session_id": "session-visitor-done-001",
-            "university_id": UCE_ID,
-            "plate_text": "VISDONE",
-            "qr_code": "QR-VISDONE",
-            "entry_time": datetime.now(UTC) - timedelta(hours=1, minutes=30),
-            "exit_time": datetime.now(UTC) - timedelta(minutes=12),
-            "session_status": "OUTSIDE",
-            "access_type": "VISITOR",
-            "payment_status": "PAID",
-            "cashier_user_id": "cashier-001",
-            "amount": 2.25,
-            "paid_amount": 2.25,
-            "payment_method": "cash",
-            "paid_at": datetime.now(UTC) - timedelta(minutes=5),
-            "payment_valid_until": datetime.now(UTC) + timedelta(minutes=10),
-            "receipt_number": "REC-20260707-0001",
-            "notes": "Pago registrado antes de salida",
-            "currency": "USD",
-        },
-    }
-    sessions = deepcopy(INITIAL_SESSIONS)
 
-    @classmethod
-    def reset(cls) -> None:
-        cls.sessions = deepcopy(cls.INITIAL_SESSIONS)
+    def __init__(self) -> None:
+        self._ensure_seed_payment()
+
+    def _ensure_seed_payment(self) -> None:
+        # Espeja la sesion demo VIS1234 que parking-service ya siembra como
+        # "adentro" - aqui se le agrega un pago ya registrado, igual que el
+        # mock traia precargado, para que la demo de caja siga siendo util.
+        with self._connect() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    "SELECT id, university_id FROM parking_sessions WHERE id = %(id)s",
+                    {"id": UUID(_DEMO_PAID_SESSION_ID)},
+                )
+                session_row = cursor.fetchone()
+                if session_row is None:
+                    return
+                cursor.execute(
+                    "SELECT 1 FROM payments WHERE parking_session_id = %(id)s",
+                    {"id": session_row["id"]},
+                )
+                if cursor.fetchone() is not None:
+                    return
+                cursor.execute(
+                    """
+                    INSERT INTO payments (
+                        id, university_id, parking_session_id, reference_code,
+                        amount, currency, payment_method, payment_status, paid_at, notes
+                    )
+                    VALUES (
+                        gen_random_uuid(), %(university_id)s, %(session_id)s, 'REC-DEMO-0001',
+                        2.25, 'USD', 'cash', 'paid', NOW() - INTERVAL '4 minutes', 'Pago registrado antes de salida'
+                    )
+                    """,
+                    {"university_id": session_row["university_id"], "session_id": session_row["id"]},
+                )
+            connection.commit()
 
     def find_by_plate(self, plate: str, university_id: str | None = None) -> dict | None:
         return self.find_active_visitor_session_by_plate(plate, university_id=university_id)
 
     def find_active_visitor_session_by_plate(self, plate: str, university_id: str | None = None) -> dict | None:
         normalized_plate = plate.strip().upper()
-        matches = [
-            session.copy()
-            for session in self.sessions.values()
-            if session["plate_text"] == normalized_plate
-            and (university_id is None or session.get("university_id") == university_id)
-            and session["session_status"] == "INSIDE"
-            and session.get("access_type", "VISITOR") == "VISITOR"
-        ]
-        if not matches:
-            return None
-        matches.sort(key=lambda item: item["entry_time"], reverse=True)
-        return matches[0]
+        with self._connect() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                session_row = self._select_session(
+                    cursor,
+                    plate=normalized_plate,
+                    university_id=university_id,
+                    require_open=True,
+                    require_visitor=True,
+                )
+                if session_row is None:
+                    return None
+                payment_row = self._latest_payment(cursor, session_row["id"])
+        return self._to_shadow_dict(session_row, payment_row)
 
     def find_by_qr(self, qr_code: str) -> dict | None:
-        for session in self.sessions.values():
-            if (
-                session["qr_code"] == qr_code
-                and session["session_status"] == "INSIDE"
-                and session.get("access_type", "VISITOR") == "VISITOR"
-            ):
-                return session.copy()
-        return None
+        plate = qr_code[3:] if qr_code.upper().startswith("QR-") else qr_code
+        return self.find_active_visitor_session_by_plate(plate)
 
     def find_by_session_id(self, session_id: str) -> dict | None:
-        session = self.sessions.get(session_id)
-        return session.copy() if session else None
+        with self._connect() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                session_row = self._select_session(cursor, session_id=session_id)
+                if session_row is None:
+                    return None
+                payment_row = self._latest_payment(cursor, session_row["id"])
+        return self._to_shadow_dict(session_row, payment_row)
 
     def mark_as_paid(self, session_id: str, cashier_user_id: str, amount: float, payment_method: str) -> dict:
-        session = self.sessions[session_id]
-        return self._apply_paid_state(
-            session=session,
-            cashier_user_id=cashier_user_id,
-            amount=amount,
-            payment_method=payment_method,
-            notes=session.get("notes"),
-        )
+        with self._connect() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                session_row = self._select_session(cursor, session_id=session_id)
+                payment_row = self._upsert_payment(
+                    cursor,
+                    session_row=session_row,
+                    payment_status="paid",
+                    amount=amount,
+                    payment_method=payment_method,
+                    cashier_user_id=cashier_user_id,
+                    notes=None,
+                    set_paid_at=True,
+                )
+            connection.commit()
+        return self._to_shadow_dict(session_row, payment_row)
 
     def upsert_session(
         self,
@@ -124,61 +121,51 @@ class PaymentRepository:
         payment_status: str = "PENDING",
         access_type: str = "VISITOR",
     ) -> dict:
-        normalized_plate = plate_text.strip().upper()
-        existing = self.sessions.get(session_id)
-        if existing is not None:
-            session = existing
-            session["university_id"] = university_id or session.get("university_id") or self.UCE_ID
-            session["plate_text"] = normalized_plate
-            session["session_status"] = "INSIDE"
-            session["access_type"] = access_type
-            session["payment_status"] = payment_status
-            session["exit_time"] = None
-            if payment_status == "PENDING":
-                session["amount"] = None
-                session["paid_amount"] = None
-                session["payment_method"] = None
-                session["paid_at"] = None
-                session["payment_valid_until"] = None
-                session["receipt_number"] = None
-                session["notes"] = None
-                session["cashier_user_id"] = None
-            elif payment_status == "NOT_REQUIRED":
-                session["amount"] = 0.0
-                session["paid_amount"] = None
-                session["payment_method"] = None
-                session["paid_at"] = None
-                session["payment_valid_until"] = None
-                session["receipt_number"] = None
-                session["notes"] = "Monthly permit / member access"
-                session["cashier_user_id"] = None
-            return session.copy()
-
-        session = {
-            "session_id": session_id,
-            "university_id": university_id or self.UCE_ID,
-            "plate_text": normalized_plate,
-            "qr_code": f"QR-{normalized_plate}",
-            "entry_time": datetime.now(UTC),
-            "exit_time": None,
-            "session_status": "INSIDE",
-            "access_type": access_type,
-            "payment_status": payment_status,
-            "cashier_user_id": None,
-            "amount": None,
-            "paid_amount": None,
-            "payment_method": None,
-            "paid_at": None,
-            "payment_valid_until": None,
-            "receipt_number": None,
-            "notes": None,
-            "currency": "USD",
-        }
-        if payment_status == "NOT_REQUIRED":
-            session["amount"] = 0.0
-            session["notes"] = "Monthly permit / member access"
-        self.sessions[session_id] = session
-        return session.copy()
+        # parking-service ya creo/actualizo la fila real en parking_sessions
+        # antes de llamar aqui; esto solo se encarga de dejar un registro de
+        # pago inicial cuando el acceso no requiere cobro (miembro
+        # universitario), para que las consultas de pago tengan algo que leer.
+        del access_type
+        with self._connect() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                session_row = self._select_session(cursor, session_id=session_id)
+                payment_row = None
+                if session_row is not None and payment_status.upper() == "NOT_REQUIRED":
+                    payment_row = self._upsert_payment(
+                        cursor,
+                        session_row=session_row,
+                        payment_status="not_required",
+                        amount=0.0,
+                        payment_method=None,
+                        cashier_user_id=None,
+                        notes="Monthly permit / member access",
+                        set_paid_at=False,
+                    )
+                elif session_row is not None:
+                    payment_row = self._latest_payment(cursor, session_row["id"])
+            connection.commit()
+        if session_row is None:
+            return {
+                "session_id": session_id,
+                "university_id": university_id or self.UCE_ID,
+                "plate_text": plate_text.strip().upper(),
+                "qr_code": f"QR-{plate_text.strip().upper()}",
+                "entry_time": datetime.now(UTC),
+                "exit_time": None,
+                "session_status": "INSIDE",
+                "access_type": "VISITOR",
+                "payment_status": payment_status,
+                "cashier_user_id": None,
+                "amount": 0.0 if payment_status.upper() == "NOT_REQUIRED" else None,
+                "paid_amount": None,
+                "payment_method": None,
+                "paid_at": None,
+                "payment_valid_until": None,
+                "receipt_number": None,
+                "notes": None,
+                "currency": "USD",
+            }
+        return self._to_shadow_dict(session_row, payment_row)
 
     def mark_as_paid_by_plate(
         self,
@@ -208,52 +195,194 @@ class PaymentRepository:
         payment_method: str,
         notes: str | None,
     ) -> dict | None:
-        session = self.sessions.get(session_id)
-        if session is None:
-            return None
-        session["plate_text"] = plate_text.strip().upper()
-        return self._apply_paid_state(
-            session=session,
-            cashier_user_id=cashier_user_id,
-            amount=amount,
-            payment_method=payment_method,
-            notes=notes,
-        )
+        with self._connect() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                session_row = self._select_session(cursor, session_id=session_id)
+                if session_row is None:
+                    return None
+                payment_row = self._upsert_payment(
+                    cursor,
+                    session_row=session_row,
+                    payment_status="paid",
+                    amount=amount,
+                    payment_method=payment_method,
+                    cashier_user_id=cashier_user_id,
+                    notes=notes,
+                    set_paid_at=True,
+                )
+            connection.commit()
+        return self._to_shadow_dict(session_row, payment_row)
 
     def close_session(self, *, session_id: str, plate_text: str, payment_status: str, exit_time: datetime) -> dict | None:
-        session = self.sessions.get(session_id)
-        if session is None:
-            return None
-        session["plate_text"] = plate_text.strip().upper()
-        session["session_status"] = "OUTSIDE"
-        session["payment_status"] = payment_status
-        session["exit_time"] = exit_time
-        return session.copy()
+        del plate_text  # parking-service ya cerro la sesion real; solo leemos su estado
+        with self._connect() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                session_row = self._select_session(cursor, session_id=session_id)
+                if session_row is None:
+                    return None
+                payment_row = self._latest_payment(cursor, session_row["id"])
+        return self._to_shadow_dict(session_row, payment_row)
+
+    def list_all_sessions(self, university_id: str | None = None) -> list[dict]:
+        with self._connect() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                clause = "WHERE university_id = %(university_id)s" if university_id else ""
+                params = {"university_id": UUID(university_id)} if university_id else {}
+                cursor.execute(
+                    f"SELECT * FROM parking_sessions {clause} ORDER BY entry_time DESC",
+                    params,
+                )
+                session_rows = cursor.fetchall()
+                results = []
+                for session_row in session_rows:
+                    payment_row = self._latest_payment(cursor, session_row["id"])
+                    results.append(self._to_shadow_dict(session_row, payment_row))
+        return results
 
     def generate_receipt_number(self) -> str:
-        paid_count = sum(1 for session in self.sessions.values() if session.get("paid_at"))
-        sequence = paid_count + 1
-        return f"REC-{datetime.now(UTC).strftime('%Y%m%d')}-{sequence:04d}"
+        with self._connect() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute("SELECT nextval('payments_receipt_seq') AS seq")
+                seq = cursor.fetchone()["seq"]
+        return f"REC-{datetime.now(UTC):%Y%m%d}-{seq:04d}"
 
-    def _apply_paid_state(
+    # ------------------------------------------------------------------ #
+    def _select_session(
         self,
+        cursor,
         *,
-        session: dict,
-        cashier_user_id: str,
+        session_id: str | None = None,
+        plate: str | None = None,
+        university_id: str | None = None,
+        require_open: bool = False,
+        require_visitor: bool = False,
+    ) -> dict | None:
+        clauses: list[str] = []
+        params: dict[str, Any] = {}
+        if session_id:
+            clauses.append("id = %(session_id)s")
+            params["session_id"] = UUID(session_id)
+        if plate:
+            clauses.append("detected_plate = %(plate)s")
+            params["plate"] = plate
+        if university_id:
+            clauses.append("university_id = %(university_id)s")
+            params["university_id"] = UUID(university_id)
+        if require_open:
+            clauses.append("session_status = 'open'")
+        if require_visitor:
+            clauses.append("session_type = 'visitor'")
+        if not clauses:
+            return None
+        cursor.execute(
+            f"SELECT * FROM parking_sessions WHERE {' AND '.join(clauses)} ORDER BY entry_time DESC LIMIT 1",
+            params,
+        )
+        return cursor.fetchone()
+
+    def _latest_payment(self, cursor, parking_session_id) -> dict | None:
+        cursor.execute(
+            "SELECT * FROM payments WHERE parking_session_id = %(id)s ORDER BY created_at DESC LIMIT 1",
+            {"id": parking_session_id},
+        )
+        return cursor.fetchone()
+
+    def _upsert_payment(
+        self,
+        cursor,
+        *,
+        session_row: dict | None,
+        payment_status: str,
         amount: float,
-        payment_method: str,
+        payment_method: str | None,
+        cashier_user_id: str | None,
         notes: str | None,
-    ) -> dict:
-        paid_at = datetime.now(UTC)
-        session["session_status"] = "INSIDE"
-        session["exit_time"] = None
-        session["payment_status"] = "PAID"
-        session["cashier_user_id"] = cashier_user_id
-        session["amount"] = round(amount, 2)
-        session["paid_amount"] = round(amount, 2)
-        session["payment_method"] = payment_method
-        session["paid_at"] = paid_at
-        session["payment_valid_until"] = paid_at + timedelta(minutes=settings.payment_grace_minutes)
-        session["receipt_number"] = self.generate_receipt_number()
-        session["notes"] = notes.strip() if notes else None
-        return session.copy()
+        set_paid_at: bool,
+    ) -> dict | None:
+        if session_row is None:
+            return None
+        cursor.execute("SELECT nextval('payments_receipt_seq') AS seq")
+        seq = cursor.fetchone()["seq"]
+        receipt_number = f"REC-{datetime.now(UTC):%Y%m%d}-{seq:04d}"
+        try:
+            collected_by = UUID(cashier_user_id) if cashier_user_id else None
+        except ValueError:
+            collected_by = None
+        cursor.execute(
+            """
+            INSERT INTO payments (
+                id, university_id, parking_session_id, collected_by_user_id, reference_code,
+                amount, currency, payment_method, payment_status, paid_at, notes
+            )
+            VALUES (
+                gen_random_uuid(), %(university_id)s, %(session_id)s, %(collected_by)s, %(reference_code)s,
+                %(amount)s, 'USD', %(payment_method)s, %(payment_status)s, %(paid_at)s, %(notes)s
+            )
+            RETURNING *
+            """,
+            {
+                "university_id": session_row["university_id"],
+                "session_id": session_row["id"],
+                "collected_by": collected_by,
+                "reference_code": receipt_number,
+                "amount": round(float(amount), 2),
+                "payment_method": payment_method,
+                "payment_status": payment_status,
+                "paid_at": datetime.now(UTC) if set_paid_at else None,
+                "notes": notes.strip() if notes else None,
+            },
+        )
+        return cursor.fetchone()
+
+    def _to_shadow_dict(self, session_row: dict, payment_row: dict | None) -> dict:
+        paid_at = payment_row.get("paid_at") if payment_row else None
+        payment_valid_until = None
+        if paid_at is not None:
+            payment_valid_until = paid_at + timedelta(minutes=settings.payment_grace_minutes)
+        return {
+            "session_id": str(session_row["id"]),
+            "university_id": str(session_row["university_id"]) if session_row.get("university_id") else None,
+            "plate_text": session_row["detected_plate"],
+            "qr_code": f"QR-{session_row['detected_plate']}",
+            "entry_time": session_row["entry_time"],
+            "exit_time": session_row.get("exit_time"),
+            "session_status": _app_session_status(session_row["session_status"]),
+            "access_type": _app_access_type(session_row["session_type"]),
+            "payment_status": (payment_row["payment_status"].upper() if payment_row else "PENDING"),
+            "cashier_user_id": str(payment_row["collected_by_user_id"]) if payment_row and payment_row.get("collected_by_user_id") else None,
+            "amount": float(payment_row["amount"]) if payment_row else None,
+            "paid_amount": float(payment_row["amount"]) if payment_row and payment_row["payment_status"] == "paid" else None,
+            "payment_method": payment_row.get("payment_method") if payment_row else None,
+            "paid_at": paid_at,
+            "payment_valid_until": payment_valid_until,
+            "receipt_number": payment_row.get("reference_code") if payment_row else None,
+            "notes": payment_row.get("notes") if payment_row else None,
+            "currency": "USD",
+        }
+
+    def _connect(self):
+        last_error: OperationalError | None = None
+        for attempt in range(1, 4):
+            try:
+                return connect(
+                    host=settings.postgres_core_host,
+                    port=settings.postgres_core_internal_port,
+                    dbname=settings.postgres_core_db,
+                    user=settings.postgres_core_user,
+                    password=settings.postgres_core_password,
+                    connect_timeout=3,
+                )
+            except OperationalError as exc:
+                last_error = exc
+                logger.warning(
+                    "payment_repository connection_failed attempt=%s host=%s port=%s db=%s error=%s",
+                    attempt,
+                    settings.postgres_core_host,
+                    settings.postgres_core_internal_port,
+                    settings.postgres_core_db,
+                    exc,
+                )
+                if attempt < 3:
+                    sleep(0.5)
+        assert last_error is not None
+        raise last_error

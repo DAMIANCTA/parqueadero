@@ -7,6 +7,7 @@ from psycopg import connect
 
 from config import settings
 from schemas.integration import (
+    ChangePasswordRequest,
     DriverRegisterRequest,
     FaceEnrollMemberRequest,
     FaceProfileListResponse,
@@ -16,6 +17,7 @@ from schemas.integration import (
     MemberAccessValidationRequest,
     MemberCreateRequest,
     MyVehicleCreateRequest,
+    MyVehicleUpdateRequest,
     ParkingEntryRequest,
     ParkingExitRequest,
     MonthlyPermitCreateRequest,
@@ -28,6 +30,14 @@ from schemas.integration import (
     VehicleCreateRequest,
 )
 from schemas.system import DependencyHealth
+
+
+class FaceNotDetectedError(Exception):
+    pass
+
+
+class NoVehicleRegisteredError(Exception):
+    pass
 from security import encode_access_token
 
 
@@ -114,6 +124,14 @@ class IntegrationService:
         return self._get_json_with_passthrough_token(
             self.targets["auth"],
             "/auth/me",
+            bearer_token,
+        )
+
+    def change_password(self, bearer_token: str, payload: ChangePasswordRequest) -> dict:
+        return self._post_json_with_passthrough_token(
+            self.targets["auth"],
+            "/auth/change-password",
+            payload.model_dump(),
             bearer_token,
         )
 
@@ -310,6 +328,18 @@ class IntegrationService:
             permissions=["vehicles.write", "members.write"],
         )
 
+    def update_my_vehicle(self, user_id: str, payload: MyVehicleUpdateRequest) -> dict:
+        vehicles = self.list_my_vehicles(user_id)
+        if not vehicles["items"]:
+            raise NoVehicleRegisteredError("No tienes un vehículo registrado")
+        vehicle_id = vehicles["items"][0]["id"]
+        return self._patch_json(
+            self.targets["vehicle"],
+            f"/vehicles/{vehicle_id}",
+            payload.model_dump(exclude_none=True),
+            permissions=["vehicles.write"],
+        )
+
     def get_my_active_session(self, plate_text: str) -> dict:
         return self._get_json(
             self.targets["parking"],
@@ -323,6 +353,60 @@ class IntegrationService:
             f"/parking/history?plate_text={plate_text}&limit={limit}",
             permissions=["parking.entry"],
         )
+
+    def get_member_by_user(self, user_id: str) -> dict:
+        return self._get_json(self.targets["vehicle"], f"/members/by-user/{user_id}", permissions=["members.read"])
+
+    def check_face_live(self, *, file_bytes: bytes, filename: str, content_type: str) -> dict:
+        token = self._build_internal_token(["faces.verify"])
+        files = {"file": (filename, file_bytes, content_type or "image/jpeg")}
+        with httpx.Client(timeout=self._build_timeout(5.0)) as client:
+            response = client.post(
+                f"{self.targets['face'].base_url}/faces/detect-live",
+                files=files,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        response.raise_for_status()
+        return response.json()
+
+    def detect_face(self, image_id: str, university_id: str) -> dict:
+        return self._post_json(
+            self.targets["face"],
+            "/faces/detect",
+            {"image_id": image_id, "university_id": university_id},
+            permissions=["faces.verify"],
+        )
+
+    def enroll_my_face(
+        self,
+        user: dict,
+        plate_text: str,
+        *,
+        file_bytes: bytes,
+        filename: str,
+        content_type: str,
+    ) -> dict:
+        member = self.get_member_by_user(user["sub"])
+        university_id = user.get("university_id") or ""
+        evidence = self.proxy_evidence_upload(
+            file_bytes=file_bytes,
+            filename=filename,
+            content_type=content_type,
+            image_type="face_enrollment",
+            plate=plate_text,
+            university_id=university_id,
+            session_id=None,
+        )
+        # Reutiliza el mismo servicio de deteccion facial que usa garita para
+        # rechazar fotos sin un rostro valido/de buena calidad antes de
+        # enrolarlas (en vez de confiar ciegamente en la foto subida).
+        detection = self.detect_face(evidence["image_id"], university_id)
+        if not detection.get("detected"):
+            raise FaceNotDetectedError(
+                "No se detectó un rostro válido en la foto. Intenta de nuevo con buena iluminación y mirando a la cámara."
+            )
+        payload = FaceEnrollMemberRequest(face_image_id=evidence["image_id"])
+        return self.enroll_member_face(member["id"], payload)
 
     def get_vehicle_by_plate(self, plate_text: str) -> dict:
         return self._get_json(self.targets["vehicle"], f"/vehicles/by-plate/{plate_text}", permissions=["vehicles.read"])
@@ -511,6 +595,28 @@ class IntegrationService:
         token = self._build_internal_token(permissions)
         with httpx.Client(timeout=self._build_timeout(timeout_seconds or self.default_downstream_timeout)) as client:
             response = client.post(
+                f"{target.base_url}{path}",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+            )
+        response.raise_for_status()
+        return response.json()
+
+    def _patch_json(
+        self,
+        target: DownstreamTarget,
+        path: str,
+        payload: dict,
+        *,
+        permissions: list[str],
+        timeout_seconds: float | None = None,
+    ) -> dict:
+        token = self._build_internal_token(permissions)
+        with httpx.Client(timeout=self._build_timeout(timeout_seconds or self.default_downstream_timeout)) as client:
+            response = client.patch(
                 f"{target.base_url}{path}",
                 json=payload,
                 headers={

@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     postgres_biometrics_db: str = "parking_biometrics"
     postgres_biometrics_user: str = "biometric_user"
     postgres_biometrics_password: str = "biometric_pass"
+    postgres_core_host: str = "postgres-core"
+    postgres_core_internal_port: int = 5432
+    postgres_core_db: str = "parking_core"
+    postgres_core_user: str = "parking_user"
+    postgres_core_password: str = "parking_pass"
     jwt_secret_key: str = ""
     jwt_issuer: str = "smart-parking-university"
     jwt_audience: str = "smart-parking-clients"

@@ -506,7 +506,4 @@ class PaymentFlowService:
         return self.tariff_service.calculate_duration_minutes(session["entry_time"])
 
     def _filtered_sessions(self, university_id: str | None = None) -> list[dict]:
-        sessions = list(self.payment_repository.sessions.values())
-        if university_id:
-            sessions = [session for session in sessions if session.get("university_id") == university_id]
-        return sessions
+        return self.payment_repository.list_all_sessions(university_id)

@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, File, UploadFile
 
 from schemas.faces import (
     FaceCompareRequest,
@@ -8,6 +8,7 @@ from schemas.faces import (
     FaceDetectResponse,
     FaceEnrollRequest,
     FaceEnrollResponse,
+    FaceLiveCheckResponse,
     FaceLivenessRequest,
     FaceLivenessResponse,
     FaceLivenessCheckRequest,
@@ -38,6 +39,11 @@ def detect_face(payload: FaceDetectRequest) -> FaceDetectResponse:
 @router.post("/faces/enroll", response_model=FaceEnrollResponse, dependencies=[require_permissions("faces.enroll")])
 def enroll_face(payload: FaceEnrollRequest) -> FaceEnrollResponse:
     return face_service.enroll(payload)
+
+
+@router.post("/faces/detect-live", response_model=FaceLiveCheckResponse, dependencies=[require_permissions("faces.verify")])
+async def detect_face_live(file: UploadFile = File(...)) -> FaceLiveCheckResponse:
+    return face_service.detect_live(await file.read())
 
 
 @router.post("/faces/verify", response_model=FaceVerifyResponse, dependencies=[require_permissions("faces.verify")])

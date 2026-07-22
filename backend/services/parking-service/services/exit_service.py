@@ -55,7 +55,13 @@ class ExitService:
             university_id=payload.university_id,
             plate_text=normalized_plate,
         )
-        if active_session is not None and active_session.get("access_type", "VISITOR") == "VISITOR":
+        if active_session is None:
+            return self._reject(
+                payload=payload,
+                normalized_plate=normalized_plate,
+                reason="El vehiculo no se encuentra dentro del parqueadero",
+            )
+        if active_session.get("access_type", "VISITOR") == "VISITOR":
             return self._process_visitor_exit(payload, normalized_plate, active_session, face_reference_id=face_reference_id)
 
         return self._process_registered_exit(payload, normalized_plate, active_session, face_reference_id=face_reference_id)
@@ -196,7 +202,7 @@ class ExitService:
         self,
         payload: ParkingExitRequest,
         normalized_plate: str,
-        active_session: dict | None = None,
+        active_session: dict,
         face_reference_id: str | None = None,
     ) -> ParkingExitResponse:
         authorization = self.vehicle_authorization_repository.validate_member_exit(
@@ -204,7 +210,7 @@ class ExitService:
             plate_text=normalized_plate,
             face_image_id=payload.face_image_id,
             gate_id=payload.gate_id,
-            session_person_id=active_session.get("person_id") if active_session else None,
+            session_person_id=active_session.get("person_id"),
         )
         if not authorization.get("vehicle_registered"):
             return self._reject(
@@ -243,7 +249,7 @@ class ExitService:
         }
         print(
             "parking-service registered_exit_face_validation "
-            f"session_id={active_session['session_id'] if active_session else None} image_id={payload.face_image_id} "
+            f"session_id={active_session['session_id']} image_id={payload.face_image_id} "
             f"detected={face_match.get('detected')} match={face_match.get('match')} "
             f"similarity={face_match.get('similarity')} threshold={face_match.get('threshold')} "
             f"provider={face_match.get('provider')} model_name={face_match.get('model_name')} "
@@ -254,32 +260,19 @@ class ExitService:
                 payload=payload,
                 normalized_plate=normalized_plate,
                 reason="Face verification failed",
-                session_id=active_session["session_id"] if active_session else None,
+                session_id=active_session["session_id"],
                 face_validation=face_match,
             )
 
-        if active_session is not None:
-            session_record = self.parking_session_repository.close_session(
-                session_id=active_session["session_id"],
-                plate_text=normalized_plate,
-                person_type=str(authorization.get("role_type", "STAFF")).lower().replace("staff", "employee"),
-                payment_status=active_session.get("payment_status", "NOT_REQUIRED"),
-                access_type="MEMBER",
-                exit_face_evidence_id=face_reference_id,
-                exit_plate_evidence_id=payload.plate_image_id or payload.plate_evidence_id,
-            )
-        else:
-            session_record = self.parking_session_repository.create_registered_exit_record(
-                plate_text=normalized_plate,
-                person_type=str(authorization.get("role_type", "STAFF")).lower().replace("staff", "employee"),
-                access_type="MEMBER",
-                person_id=authorization.get("person_id"),
-                person_name=authorization.get("person_name"),
-                role_type=authorization.get("role_type"),
-                vehicle_id=authorization.get("vehicle_id"),
-                exit_face_evidence_id=face_reference_id,
-                exit_plate_evidence_id=payload.plate_image_id or payload.plate_evidence_id,
-            )
+        session_record = self.parking_session_repository.close_session(
+            session_id=active_session["session_id"],
+            plate_text=normalized_plate,
+            person_type=str(authorization.get("role_type", "STAFF")).lower().replace("staff", "employee"),
+            payment_status=active_session.get("payment_status", "NOT_REQUIRED"),
+            access_type="MEMBER",
+            exit_face_evidence_id=face_reference_id,
+            exit_plate_evidence_id=payload.plate_image_id or payload.plate_evidence_id,
+        )
         self.evidence_service.link_evidence_to_session(
             face_reference_id,
             session_record["session_id"],

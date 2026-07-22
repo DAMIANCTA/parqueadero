@@ -4,6 +4,8 @@ from config import settings
 from repositories.user_repository import UserRepository
 from schemas.auth import (
     AuthenticatedUserResponse,
+    ChangePasswordRequest,
+    ChangePasswordResponse,
     CurrentUserResponse,
     DriverRegisterRequest,
     LoginRequest,
@@ -236,12 +238,21 @@ class AuthService:
             username=user["username"],
             full_name=user["full_name"],
             email=user.get("email"),
+            document_number=user.get("document_number"),
+            phone=user.get("phone"),
             role=user["role"],
             roles=user["roles"],
             university_id=user.get("university_id"),
             permissions=permissions,
             status=user.get("status", "ACTIVE"),
         )
+
+    def change_password(self, actor: dict, payload: ChangePasswordRequest) -> ChangePasswordResponse:
+        user = self.repository.get_user(actor["username"])
+        if user is None or not self.repository.verify_password(user, payload.current_password):
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
+        self.repository.set_password(actor["username"], payload.new_password)
+        return ChangePasswordResponse(changed=True)
 
     @staticmethod
     def _to_university_response(record: dict) -> UniversityResponse:

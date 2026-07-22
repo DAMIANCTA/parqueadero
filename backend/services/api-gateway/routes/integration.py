@@ -4,6 +4,9 @@ import httpx
 from schemas.integration import (
     AccessHistoryListResponse,
     ActiveSessionResponse,
+    ChangePasswordRequest,
+    ChangePasswordResponse,
+    FaceLiveCheckResponse,
     DriverRegisterRequest,
     EvidenceForensicResponse,
     FaceEnrollMemberRequest,
@@ -34,6 +37,7 @@ from schemas.integration import (
     MonthlyPermitListResponse,
     MonthlyPermitResponse,
     MyVehicleCreateRequest,
+    MyVehicleUpdateRequest,
     ParkingAuthorizationResponse,
     PlateDetectBatchRequest,
     PlateDetectBatchResponse,
@@ -58,7 +62,7 @@ from schemas.integration import (
     VehicleResponse,
 )
 from security import get_request_user, require_permissions, resolve_university_scope
-from services.integration_service import IntegrationService
+from services.integration_service import FaceNotDetectedError, IntegrationService, NoVehicleRegisteredError
 
 
 router = APIRouter(tags=["integration"])
@@ -97,6 +101,21 @@ def current_user(authorization: str | None = Header(default=None)) -> CurrentUse
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Auth service unavailable: {exc}") from exc
     return CurrentUserResponse(**response)
+
+
+@router.post("/auth/change-password", response_model=ChangePasswordResponse)
+def change_my_password(
+    payload: ChangePasswordRequest,
+    authorization: str | None = Header(default=None),
+) -> ChangePasswordResponse:
+    token = _extract_bearer_token(authorization)
+    try:
+        response = integration_service.change_password(token, payload)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Auth service unavailable: {exc}") from exc
+    return ChangePasswordResponse(**response)
 
 
 @router.post("/auth/register", response_model=GatewayTokenResponse)
@@ -498,6 +517,20 @@ def register_my_vehicle(request: Request, payload: MyVehicleCreateRequest) -> Ve
     return VehicleResponse(**response)
 
 
+@router.patch("/vehicles/mine", response_model=VehicleResponse, dependencies=[require_permissions("vehicles.self_manage")])
+def update_my_vehicle(request: Request, payload: MyVehicleUpdateRequest) -> VehicleResponse:
+    user = get_request_user(request)
+    try:
+        response = integration_service.update_my_vehicle(user["sub"], payload)
+    except NoVehicleRegisteredError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Vehicle service unavailable: {exc}") from exc
+    return VehicleResponse(**response)
+
+
 @router.get(
     "/vehicles/mine/authorized-drivers",
     response_model=VehicleLookupResponse,
@@ -515,6 +548,52 @@ def list_my_authorized_drivers(request: Request) -> VehicleLookupResponse:
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Vehicle service unavailable: {exc}") from exc
     return VehicleLookupResponse(**response)
+
+
+@router.post(
+    "/vehicles/mine/face",
+    response_model=FaceProfileResponse,
+    dependencies=[require_permissions("vehicles.self_manage")],
+)
+async def enroll_my_face(request: Request, file: UploadFile = File(...)) -> FaceProfileResponse:
+    user = get_request_user(request)
+    plate_text = _resolve_my_plate(user)
+    if plate_text is None:
+        raise HTTPException(status_code=409, detail="Registra tu vehículo antes de registrar tu rostro")
+    try:
+        response = integration_service.enroll_my_face(
+            user,
+            plate_text,
+            file_bytes=await file.read(),
+            filename=file.filename or "face.jpg",
+            content_type=file.content_type or "image/jpeg",
+        )
+    except FaceNotDetectedError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Face service unavailable: {exc}") from exc
+    return FaceProfileResponse(**response)
+
+
+@router.post(
+    "/vehicles/mine/face/live-check",
+    response_model=FaceLiveCheckResponse,
+    dependencies=[require_permissions("vehicles.self_manage")],
+)
+async def check_my_face_live(file: UploadFile = File(...)) -> FaceLiveCheckResponse:
+    try:
+        response = integration_service.check_face_live(
+            file_bytes=await file.read(),
+            filename=file.filename or "live.jpg",
+            content_type=file.content_type or "image/jpeg",
+        )
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=exc.response.text) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Face service unavailable: {exc}") from exc
+    return FaceLiveCheckResponse(**response)
 
 
 @router.get("/vehicles/by-plate/{plate_text}", response_model=VehicleLookupResponse, dependencies=[require_permissions("vehicles.read")])

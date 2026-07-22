@@ -1,4 +1,5 @@
 import logging
+from datetime import date, timedelta
 
 from fastapi import HTTPException
 
@@ -26,6 +27,7 @@ from schemas.members import (
     VehicleListResponse,
     VehicleLookupResponse,
     VehicleResponse,
+    VehicleUpdateRequest,
 )
 
 
@@ -50,6 +52,12 @@ class MemberAccessService:
         record = self.repository.get_member(member_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Member not found")
+        return MemberResponse(**record)
+
+    def get_member_by_user(self, user_id: str) -> MemberResponse:
+        record = self.repository.get_member_by_user_id(user_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Member not found for this user")
         return MemberResponse(**record)
 
     def create_vehicle(self, payload: VehicleCreateRequest) -> VehicleResponse:
@@ -97,19 +105,52 @@ class MemberAccessService:
             }
         )
         self.repository.authorize_person(vehicle["id"], member["id"], is_owner=True)
+
+        # Sin un permiso vigente, validate_member_access (el chequeo real que
+        # hace la garita) salta el rostro de esta persona por completo, sin
+        # importar que este bien enrolado. El auto-registro no pasa por caja,
+        # asi que se genera un permiso valido por 1 anio sin costo asociado.
+        today = date.today()
+        self.repository.create_monthly_permit(
+            {
+                "university_id": payload.university_id,
+                "person_id": member["id"],
+                "vehicle_id": vehicle["id"],
+                "start_date": today,
+                "end_date": today + timedelta(days=365),
+                "amount": 0,
+                "payment_method": "self_registration",
+                "status": "VALID",
+            }
+        )
         return VehicleResponse(**vehicle)
+
+    def update_vehicle(self, vehicle_id: str, payload: VehicleUpdateRequest) -> VehicleResponse:
+        existing = self.repository.get_vehicle(vehicle_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Vehicle not found")
+        if payload.plate_text:
+            other = self.repository.get_vehicle_by_plate(payload.plate_text)
+            if other is not None and other["id"] != vehicle_id:
+                raise HTTPException(status_code=409, detail="Vehicle plate is already registered")
+        record = self.repository.update_vehicle(vehicle_id, payload.model_dump(exclude_none=True))
+        return VehicleResponse(**record)
 
     def get_vehicle_by_plate(self, plate_text: str) -> VehicleLookupResponse:
         vehicle = self.repository.get_vehicle_by_plate(plate_text)
         if vehicle is None:
             return VehicleLookupResponse(found=False, message="Vehicle plate is not registered")
-        people = [MemberResponse(**item) for item in self.repository.get_authorized_people_for_vehicle(vehicle["id"])]
+        people = [self._to_member_response_with_face(item) for item in self.repository.get_authorized_people_for_vehicle(vehicle["id"])]
         return VehicleLookupResponse(
             found=True,
             message="Vehicle plate is registered",
             vehicle=VehicleResponse(**vehicle),
             authorized_people=people,
         )
+
+    def _to_member_response_with_face(self, member_record: dict) -> MemberResponse:
+        has_face = bool(self.repository.get_face_profiles_by_person(member_record["id"]))
+        return MemberResponse(**member_record, has_face_profile=has_face)
 
     def authorize_person(self, vehicle_id: str, payload: VehicleAuthorizationRequest) -> VehicleAuthorizationResponse:
         vehicle = self.repository.get_vehicle(vehicle_id)

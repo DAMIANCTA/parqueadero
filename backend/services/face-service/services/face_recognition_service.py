@@ -1,7 +1,9 @@
+import io
 import logging
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
+from PIL import Image
 
 from config import settings
 from repositories.biometric_repository import BiometricRepository
@@ -13,6 +15,7 @@ from schemas.faces import (
     FaceDetectResponse,
     FaceEnrollRequest,
     FaceEnrollResponse,
+    FaceLiveCheckResponse,
     FaceLivenessCheckRequest,
     FaceLivenessCheckResponse,
     FaceLivenessRequest,
@@ -199,6 +202,45 @@ class FaceRecognitionService:
             detected_at=datetime.now(UTC),
             stored_in_biometric_db=template_id is not None,
         )
+
+    def detect_live(self, image_bytes: bytes) -> FaceLiveCheckResponse:
+        # Version "sin persistencia" de detect(): la usa la app movil para
+        # sondear la camara mientras el usuario se acomoda (antes de la
+        # cuenta regresiva), asi que no escribe nada en Minio/Postgres ni
+        # necesita un image_id ya subido - solo analiza los bytes crudos.
+        try:
+            width, height = Image.open(io.BytesIO(image_bytes)).size
+        except Exception:
+            return FaceLiveCheckResponse(detected=False, centered=False, warnings=["INVALID_IMAGE"])
+
+        provider = self._resolve_face_provider()
+        synthetic_reference = ImageReference(
+            bucket="live-preview",
+            object_path="live-preview/face-check.jpg",
+            object_version=None,
+            sha256_hash=None,
+            content_type="image/jpeg",
+            image_type="face_enrollment",
+        )
+        analysis = provider.analyze_face(
+            image_reference=synthetic_reference,
+            image_bytes=image_bytes,
+            person_id=None,
+            quality_score_hint=None,
+        )
+        if not analysis.detected or analysis.bounding_box is None:
+            return FaceLiveCheckResponse(detected=False, centered=False, warnings=analysis.warnings)
+
+        box = analysis.bounding_box
+        box_center_x = box.x + box.width / 2
+        box_center_y = box.y + box.height / 2
+        centered = (
+            abs(box_center_x - width / 2) <= width * 0.22
+            and abs(box_center_y - height / 2) <= height * 0.22
+            and box.width >= width * 0.18
+        )
+        quality_score = analysis.embedding.quality_score if analysis.embedding else None
+        return FaceLiveCheckResponse(detected=True, centered=centered, quality_score=quality_score, warnings=analysis.warnings)
 
     def verify_session(self, payload: FaceVerifySessionRequest) -> FaceVerifySessionResponse:
         provider = self._resolve_face_provider()
