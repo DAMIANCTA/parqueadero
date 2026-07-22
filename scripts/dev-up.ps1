@@ -12,7 +12,12 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
 Set-Location $root
-Copy-Item .env.example .env -Force
+if (-not (Test-Path .env)) {
+    Copy-Item .env.example .env
+    Write-Host "Se creo .env desde .env.example (primera vez)."
+} else {
+    Write-Host ".env ya existe, no se toca (para no perder ajustes ya hechos)."
+}
 Write-Host "Levantando Docker Compose (backend completo, incluye garita-controller)..."
 docker compose up -d --build
 
